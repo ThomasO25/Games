@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Blackjack · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar"></header>
+  <h2 class="title">Blackjack</h2>
+  <p class="lead">Beat the dealer without busting. Blackjack pays 3:2. Dealer stands on all 17s.</p>
+
+  <div class="felt">
+    <div class="tally">DEALER <b id="dealerVal">—</b></div>
+    <div class="hand" id="dealerHand"></div>
+    <div class="banner" id="banner"></div>
+    <div class="hand" id="playerHand"></div>
+    <div class="tally">YOU <b id="playerVal">—</b></div>
+  </div>
+
+  <div id="bettingUI">
+    <div class="betbar">
+      <button class="btn ghost" id="clearBet">Clear</button>
+      <div class="amt" id="betAmt">0</div>
+      <button class="btn primary" id="dealBtn">Deal</button>
+    </div>
+    <div class="chiprow">
+      <div class="chipbtn c5" data-v="5">5</div>
+      <div class="chipbtn c25" data-v="25">25</div>
+      <div class="chipbtn c100" data-v="100">100</div>
+      <div class="chipbtn c500" data-v="500">500</div>
+    </div>
+  </div>
+
+  <div id="actionUI" class="hidden">
+    <div class="row">
+      <button class="btn primary" id="hitBtn">Hit</button>
+      <button class="btn" id="standBtn">Stand</button>
+      <button class="btn" id="doubleBtn">Double</button>
+    </div>
+  </div>
+
+  <div id="nextUI" class="hidden">
+    <button class="btn primary" id="nextBtn" style="width:100%">Next hand</button>
+  </div>
+
+  <div class="panel hidden" id="brokeUI" style="margin-top:14px;text-align:center">
+    <p style="margin:0 0 10px;color:var(--muted)">Out of chips! The house extends a little credit.</p>
+    <button class="btn primary" id="topUpBtn">Top up (+1,000)</button>
+  </div>
+
+  <footer>Play chips only. The Parlour.</footer>
+</div>
+
+<script type="module">
+import { ensurePlayer, renderHeader, watchWallet, changeChips, topUp } from './common.js';
+await ensurePlayer();
+renderHeader('blackjack.html');
+
+let chips=0;
+watchWallet(w=>{ chips=w.chips??0; document.getElementById('brokeUI').classList.toggle('hidden', chips>0 || inHand); });
+
+const SUITS=[['\u2660','b'],['\u2665','r'],['\u2666','r'],['\u2663','b']];
+const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+let deck=[], player=[], dealer=[], bet=0, inHand=false, doubled=false;
+
+function buildDeck(){ deck=[]; for(const [s,c] of SUITS) for(const r of RANKS) deck.push({r,s,c}); for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; } }
+function draw(){ if(deck.length<10) buildDeck(); return deck.pop(); }
+function val(cards){ let t=0,a=0; for(const c of cards){ if(c.r==='A'){a++;t+=11;} else if(['K','Q','J'].includes(c.r)) t+=10; else t+=Number(c.r); } while(t>21&&a>0){t-=10;a--;} return t; }
+function isBlackjack(cards){ return cards.length===2 && val(cards)===21; }
+
+function cardEl(c, hidden){
+  const d=document.createElement('div'); d.className='pcard'+(hidden?' back':'')+(!hidden&&c.c==='r'?' red':'');
+  if(!hidden){ d.innerHTML=`<span class="r">${c.r}</span><span class="s">${c.s}</span><span class="rb">${c.r}</span>`; }
+  return d;
+}
+function render(hideHole){
+  const ph=document.getElementById('playerHand'); ph.innerHTML=''; player.forEach(c=>ph.appendChild(cardEl(c,false)));
+  const dh=document.getElementById('dealerHand'); dh.innerHTML=''; dealer.forEach((c,i)=>dh.appendChild(cardEl(c, hideHole && i===1)));
+  document.getElementById('playerVal').textContent = player.length?val(player):'—';
+  document.getElementById('dealerVal').textContent = dealer.length ? (hideHole ? val([dealer[0]]) : val(dealer)) : '—';
+}
+
+/* betting */
+function setBet(v){ bet=Math.max(0,Math.min(v, chips)); document.getElementById('betAmt').textContent=bet.toLocaleString(); }
+document.querySelectorAll('.chipbtn').forEach(b=> b.onclick=()=> setBet(bet+Number(b.dataset.v)) );
+document.getElementById('clearBet').onclick=()=>setBet(0);
+
+document.getElementById('dealBtn').onclick=async ()=>{
+  if(bet<=0 || bet>chips) return;
+  await changeChips(-bet);
+  inHand=true; doubled=false;
+  buildDeck(); player=[draw(),draw()]; dealer=[draw(),draw()];
+  show('action'); render(true);
+  if(isBlackjack(player) || isBlackjack(dealer)) return finish();
+  document.getElementById('doubleBtn').disabled = (chips < bet);
+};
+document.getElementById('hitBtn').onclick=()=>{
+  player.push(draw()); render(true);
+  if(val(player)>=21) finish();
+  else document.getElementById('doubleBtn').disabled=true;
+};
+document.getElementById('standBtn').onclick=()=>finish();
+document.getElementById('doubleBtn').onclick=async ()=>{
+  if(chips<bet) return; await changeChips(-bet); bet*=2; doubled=true;
+  player.push(draw()); render(true); finish();
+};
+
+async function finish(){
+  // dealer plays if player not busted
+  if(val(player)<=21){ while(val(dealer)<17) dealer.push(draw()); }
+  render(false);
+  const pv=val(player), dv=val(dealer);
+  const banner=document.getElementById('banner'); let msg, cls, give=0;
+  if(isBlackjack(player) && !isBlackjack(dealer)){ msg='Blackjack! 3:2'; cls='win'; give=Math.round(bet*2.5); }
+  else if(isBlackjack(dealer) && !isBlackjack(player)){ msg='Dealer blackjack'; cls='lose'; give=0; }
+  else if(isBlackjack(dealer) && isBlackjack(player)){ msg='Push'; cls='push'; give=bet; }
+  else if(pv>21){ msg='Bust'; cls='lose'; give=0; }
+  else if(dv>21){ msg='Dealer busts — you win!'; cls='win'; give=bet*2; }
+  else if(pv>dv){ msg='You win!'; cls='win'; give=bet*2; }
+  else if(pv<dv){ msg='Dealer wins'; cls='lose'; give=0; }
+  else { msg='Push'; cls='push'; give=bet; }
+  banner.textContent=msg; banner.className='banner '+cls;
+  if(give>0) await changeChips(give);
+  inHand=false; show('next');
+}
+
+function show(which){
+  document.getElementById('bettingUI').classList.toggle('hidden', which!=='bet');
+  document.getElementById('actionUI').classList.toggle('hidden', which!=='action');
+  document.getElementById('nextUI').classList.toggle('hidden', which!=='next');
+  document.getElementById('brokeUI').classList.toggle('hidden', chips>0 || inHand);
+}
+document.getElementById('nextBtn').onclick=()=>{ player=[];dealer=[]; document.getElementById('banner').textContent=''; document.getElementById('banner').className='banner'; setBet(0); render(false); show('bet'); };
+document.getElementById('topUpBtn').onclick=async ()=>{ await topUp(); };
+
+setBet(0); show('bet'); render(false);
+</script>
+</body>
+</html>

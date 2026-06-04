@@ -1,0 +1,160 @@
+/* ============ The Parlour — shared design system ============ */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Spectral:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#10130f; --bg2:#161a13; --panel:#1d2219; --panel2:#252b1f;
+  --felt:#23492f; --felt-d:#1a3a24; --walnut:#6b4f32; --walnut-d:#3a2a1a;
+  --text:#ece3d0; --muted:#a4957a; --faint:#6f6452; --line:#39352a;
+  --brass:#c8a046; --brass-lite:#e6c879; --red:#c2603f; --green:#7faa63;
+  --sq-light:#e9d9b6; --sq-dark:#7a5c3a; --pc-white:#faf6ec; --pc-black:#221d16;
+  --chip:#c8a046; --radius:16px;
+  --shadow:0 18px 40px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:'Spectral',Georgia,serif;-webkit-font-smoothing:antialiased}
+body{
+  background:
+    radial-gradient(120% 70% at 50% -10%, #232a1c 0%, transparent 55%),
+    radial-gradient(90% 60% at 100% 110%, #1a2417 0%, transparent 50%),
+    var(--bg);
+  min-height:100vh;
+}
+a{color:var(--brass-lite);text-decoration:none}
+.wrap{max-width:580px;margin:0 auto;padding:14px 16px 48px}
+
+/* ---- app bar (shared header) ---- */
+.appbar{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 2px 14px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.appbar .brand{display:flex;align-items:center;gap:9px;cursor:pointer}
+.appbar .brand .glyph{font-size:22px;color:var(--brass)}
+.appbar .brand b{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:21px;letter-spacing:.3px}
+.appbar .right{display:flex;align-items:center;gap:12px}
+.wallet{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);
+  border-radius:30px;padding:6px 13px 6px 7px;font-size:14px;font-variant-numeric:tabular-nums}
+.wallet .coin{width:20px;height:20px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, var(--brass-lite), var(--brass) 70%);
+  border:2px solid #8a6d28;display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:#5c4710;font-weight:700}
+.wallet .who{color:var(--muted);font-size:12px;border-left:1px solid var(--line);padding-left:10px;margin-left:3px;cursor:pointer}
+
+/* ---- headings ---- */
+h1.title{font-family:'Cormorant Garamond';font-weight:700;font-size:34px;margin:2px 0 2px}
+h2.title{font-family:'Cormorant Garamond';font-weight:600;font-size:29px;margin:2px 0 2px}
+.lead{color:var(--muted);font-size:14.5px;margin:0 0 22px;line-height:1.55}
+.eyebrow{font-size:10.5px;letter-spacing:3px;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+
+/* ---- hub cards ---- */
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:6px}
+.card{position:relative;display:block;background:linear-gradient(160deg,var(--panel),var(--bg2));
+  border:1px solid var(--line);border-radius:var(--radius);padding:18px 16px;cursor:pointer;
+  transition:transform .18s ease,border-color .18s ease;overflow:hidden;color:var(--text)}
+.card:active{transform:scale(.98)}
+.card.live:hover{border-color:var(--brass)}
+.card .ico{font-size:30px;line-height:1;margin-bottom:12px;display:block}
+.card h3{font-family:'Cormorant Garamond';font-size:22px;margin:0 0 4px;font-weight:600}
+.card p{font-size:12px;color:var(--muted);margin:0;line-height:1.45}
+.card.soon{opacity:.5}
+.card .badge{position:absolute;top:12px;right:12px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--bg);background:var(--brass);padding:3px 7px;border-radius:20px;font-weight:600}
+.card.soon .badge{background:var(--faint);color:var(--text)}
+.section-label{font-family:'Cormorant Garamond';font-size:15px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--brass);margin:26px 0 10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+
+/* ---- buttons ---- */
+.btn{font-family:'Spectral';font-size:14px;text-align:center;color:var(--text);background:var(--panel);
+  border:1px solid var(--line);border-radius:11px;padding:12px 16px;cursor:pointer;transition:.15s;display:inline-block}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--brass);color:var(--bg);border-color:var(--brass);font-weight:600}
+.btn.ghost{background:none}
+.btn.red{background:var(--red);border-color:var(--red);color:#fff;font-weight:600}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:9px}
+.row .btn{flex:1}
+
+/* ---- pills ---- */
+.modes{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 16px}
+.pill{font-size:12.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);
+  padding:8px 14px;border-radius:30px;cursor:pointer;transition:.15s}
+.pill.on{background:var(--brass);color:var(--bg);border-color:var(--brass);font-weight:600}
+.pill[disabled]{opacity:.4;cursor:not-allowed}
+
+/* ---- status strip ---- */
+.status{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:14.5px}
+.status .msg{font-weight:500}.status .msg.alert{color:var(--brass-lite)}
+.dot{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--faint);flex:none}
+.dot.w{background:var(--pc-white)}.dot.b{background:var(--pc-black)}
+
+/* ---- felt table surface (casino games) ---- */
+.felt{background:
+   radial-gradient(120% 120% at 50% 0%, var(--felt) 0%, var(--felt-d) 100%);
+   border:10px solid var(--walnut-d);border-radius:20px;box-shadow:var(--shadow),inset 0 0 60px rgba(0,0,0,.35);
+   padding:22px 18px;position:relative}
+.felt::after{content:'';position:absolute;inset:6px;border:1px solid rgba(230,200,121,.18);border-radius:13px;pointer-events:none}
+
+/* ---- playing cards ---- */
+.hand{display:flex;gap:8px;flex-wrap:wrap;min-height:96px;align-items:center;justify-content:center}
+.pcard{width:56px;height:80px;background:#faf6ec;border-radius:8px;position:relative;
+  box-shadow:0 4px 10px -3px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;
+  font-family:'Cormorant Garamond';font-weight:700;font-size:16px;color:#1b1b1b}
+.pcard.red{color:#b22}
+.pcard .r{position:absolute;top:5px;left:6px;font-size:14px;line-height:1}
+.pcard .s{font-size:26px}
+.pcard .rb{position:absolute;bottom:5px;right:6px;font-size:14px;transform:rotate(180deg)}
+.pcard.back{background:repeating-linear-gradient(45deg,#5b3a26,#5b3a26 6px,#6b4530 6px,#6b4530 12px);
+  border:2px solid var(--brass)}
+.tally{text-align:center;font-size:13px;color:var(--muted);margin:6px 0 2px;letter-spacing:1px}
+.tally b{color:var(--brass-lite);font-size:16px}
+
+/* ---- bet controls ---- */
+.betbar{display:flex;align-items:center;gap:10px;justify-content:center;margin:16px 0 8px}
+.betbar .amt{font-family:'Cormorant Garamond';font-size:28px;font-weight:700;min-width:90px;text-align:center;color:var(--brass-lite)}
+.chiprow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+.chipbtn{width:46px;height:46px;border-radius:50%;border:3px dashed rgba(255,255,255,.6);
+  font-weight:700;font-size:13px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;transition:.12s}
+.chipbtn:active{transform:scale(.92)}
+.c5{background:#b33} .c25{background:#2a7d4f} .c100{background:#2b3a6b} .c500{background:#5b2c6b}
+
+/* ---- result banner ---- */
+.banner{text-align:center;font-family:'Cormorant Garamond';font-size:26px;font-weight:600;margin:12px 0;min-height:30px}
+.banner.win{color:var(--green)} .banner.lose{color:var(--red)} .banner.push{color:var(--muted)}
+
+/* ---- chess board ---- */
+.board-frame{background:linear-gradient(145deg,#3a2c1c,#221911);padding:10px;border-radius:14px;box-shadow:var(--shadow)}
+.coords{display:flex;justify-content:space-between;padding:0 2px;font-size:9px;color:var(--brass);letter-spacing:1px;opacity:.7}
+.board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1/1;width:100%;border-radius:6px;overflow:hidden}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sq.light{background:var(--sq-light)}.sq.dark{background:var(--sq-dark)}
+.sq .piece{font-size:min(8.6vw,46px);line-height:1;user-select:none}
+.sq .piece.w{color:var(--pc-white);text-shadow:0 1px 2px rgba(0,0,0,.55)}
+.sq .piece.b{color:var(--pc-black);text-shadow:0 1px 1px rgba(255,255,255,.18)}
+.sq.sel{box-shadow:inset 0 0 0 4px var(--brass)}
+.sq .hint{position:absolute;width:30%;height:30%;border-radius:50%;background:rgba(120,150,90,.55)}
+.sq .hint.cap{width:90%;height:90%;background:none;border:5px solid rgba(120,150,90,.55);border-radius:50%}
+.sq.last{box-shadow:inset 0 0 0 100px rgba(200,160,70,.16)}
+.sq.check{box-shadow:inset 0 0 0 4px var(--red)}
+.moves{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;
+  max-height:120px;overflow:auto;font-size:13px;line-height:1.9;font-variant-numeric:tabular-nums}
+.moves .mv{display:inline-block;padding:1px 5px;border-radius:5px;margin-right:2px}
+.moves .mv.cur{background:var(--brass);color:var(--bg)}
+.moves .num{color:var(--faint);margin-right:3px}
+
+/* ---- misc ---- */
+.empty{color:var(--faint);font-size:13px;font-style:italic}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.field{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--text);border-radius:10px;
+  padding:12px 14px;font-family:'Spectral';font-size:16px;letter-spacing:2px;text-transform:uppercase;text-align:center}
+.note{font-size:12.5px;color:var(--faint);line-height:1.5;margin-top:10px}
+.workshop{text-align:center;padding:46px 20px}
+.workshop .big{font-size:54px;margin-bottom:14px}
+footer{text-align:center;color:var(--faint);font-size:11px;margin-top:30px;letter-spacing:.5px}
+.hidden{display:none!important}
+.overlay{position:fixed;inset:0;background:rgba(8,6,4,.72);display:none;align-items:center;justify-content:center;z-index:40;padding:20px}
+.overlay.show{display:flex}
+.modal{background:var(--panel2);border:1px solid var(--brass);border-radius:18px;padding:22px;max-width:340px;width:100%;text-align:center}
+.modal h4{font-family:'Cormorant Garamond';font-size:23px;margin:0 0 6px;font-weight:600}
+.modal p{font-size:13.5px;color:var(--muted);margin:0 0 16px;line-height:1.5}
+.promo-opts{display:flex;gap:10px;justify-content:center}
+.promo-opts span{font-size:42px;cursor:pointer;color:var(--pc-white);text-shadow:0 1px 3px rgba(0,0,0,.6);padding:4px 8px;border-radius:10px}
+.promo-opts span:active{background:var(--brass)}

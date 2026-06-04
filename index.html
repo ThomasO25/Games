@@ -1,579 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>The Gambit Room</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Spectral:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.4.0/chess.min.js"></script>
-<style>
-  :root{
-    --bg:#14110e; --bg2:#1c1812; --panel:#211c15; --panel2:#2a241b;
-    --line:#3a3127; --text:#ece3d0; --muted:#a4957a; --faint:#6f6452;
-    --brass:#c8a046; --brass-lite:#e6c879; --green:#6f8c5a; --red:#c2603f;
-    --sq-light:#e9d9b6; --sq-dark:#7a5c3a;
-    --pc-white:#faf6ec; --pc-black:#221d16;
-    --sel:#d9b24a; --hint:rgba(120,150,90,.55);
-  }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-    font-family:'Spectral',Georgia,serif;-webkit-font-smoothing:antialiased}
-  body{
-    background:
-      radial-gradient(120% 80% at 50% -10%, #2a2118 0%, transparent 55%),
-      radial-gradient(100% 60% at 100% 110%, #1a2417 0%, transparent 50%),
-      var(--bg);
-    min-height:100vh;
-  }
-  .wrap{max-width:560px;margin:0 auto;padding:18px 16px 40px}
-  /* ---- top bar ---- */
-  header.top{display:flex;align-items:center;justify-content:space-between;
-    padding:6px 2px 14px;border-bottom:1px solid var(--line);margin-bottom:18px}
-  .brand{display:flex;align-items:baseline;gap:9px}
-  .brand .glyph{font-size:24px;color:var(--brass);line-height:1}
-  .brand h1{font-family:'Cormorant Garamond',serif;font-weight:700;
-    font-size:26px;margin:0;letter-spacing:.3px}
-  .brand .sub{font-size:10.5px;letter-spacing:3px;text-transform:uppercase;
-    color:var(--faint);margin-left:2px}
-  nav.tabs{display:flex;gap:4px}
-  nav.tabs button{font-family:'Spectral';font-size:13px;color:var(--muted);
-    background:none;border:none;padding:6px 9px;border-radius:8px;cursor:pointer}
-  nav.tabs button.active{color:var(--bg);background:var(--brass);font-weight:600}
-  /* ---- screens ---- */
-  .screen{display:none;animation:fade .4s ease}
-  .screen.show{display:block}
-  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-  h2.title{font-family:'Cormorant Garamond';font-weight:600;font-size:30px;margin:4px 0 2px}
-  .lead{color:var(--muted);font-size:14px;margin:0 0 20px;line-height:1.5}
-  /* ---- hub cards ---- */
-  .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
-  .card{position:relative;background:linear-gradient(160deg,var(--panel),var(--bg2));
-    border:1px solid var(--line);border-radius:16px;padding:18px 16px;cursor:pointer;
-    transition:transform .2s ease,border-color .2s ease;overflow:hidden}
-  .card:active{transform:scale(.98)}
-  .card.live:hover{border-color:var(--brass)}
-  .card .ico{font-size:30px;line-height:1;margin-bottom:12px;display:block}
-  .card h3{font-family:'Cormorant Garamond';font-size:21px;margin:0 0 4px;font-weight:600}
-  .card p{font-size:12px;color:var(--muted);margin:0;line-height:1.45}
-  .card.soon{opacity:.55}
-  .card .badge{position:absolute;top:12px;right:12px;font-size:9px;letter-spacing:1.5px;
-    text-transform:uppercase;color:var(--bg);background:var(--brass);padding:3px 7px;border-radius:20px;font-weight:600}
-  .card.soon .badge{background:var(--faint);color:var(--text)}
-  /* ---- mode pills ---- */
-  .modes{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 16px}
-  .pill{font-size:12.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);
-    padding:8px 13px;border-radius:30px;cursor:pointer;transition:.15s}
-  .pill.on{background:var(--brass);color:var(--bg);border-color:var(--brass);font-weight:600}
-  .pill[disabled]{opacity:.4;cursor:not-allowed}
-  /* ---- status ---- */
-  .status{display:flex;align-items:center;gap:10px;background:var(--panel);
-    border:1px solid var(--line);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:14.5px}
-  .dot{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--faint);flex:none}
-  .dot.w{background:var(--pc-white)} .dot.b{background:var(--pc-black)}
-  .status .msg{font-weight:500}
-  .status .msg.alert{color:var(--brass-lite)}
-  /* ---- board ---- */
-  .board-frame{background:linear-gradient(145deg,#3a2c1c,#221911);padding:10px;border-radius:14px;
-    box-shadow:0 18px 40px -18px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05)}
-  .coords{display:flex;justify-content:space-between;padding:0 2px;font-size:9px;color:var(--brass);
-    letter-spacing:1px;opacity:.7}
-  .board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1/1;width:100%;
-    border-radius:6px;overflow:hidden}
-  .sq{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer}
-  .sq.light{background:var(--sq-light)} .sq.dark{background:var(--sq-dark)}
-  .sq .piece{font-size:min(8.6vw,46px);line-height:1;user-select:none;transition:transform .12s}
-  .sq .piece.w{color:var(--pc-white);text-shadow:0 1px 2px rgba(0,0,0,.55),0 0 1px rgba(0,0,0,.5)}
-  .sq .piece.b{color:var(--pc-black);text-shadow:0 1px 1px rgba(255,255,255,.18)}
-  .sq.sel{box-shadow:inset 0 0 0 4px var(--sel)}
-  .sq .hint{position:absolute;width:30%;height:30%;border-radius:50%;background:var(--hint)}
-  .sq .hint.cap{width:90%;height:90%;background:none;border:5px solid var(--hint);border-radius:50%}
-  .sq.last{box-shadow:inset 0 0 0 100px rgba(200,160,70,.16)}
-  .sq.check{box-shadow:inset 0 0 0 4px var(--red)}
-  /* ---- controls + movelist ---- */
-  .ctrl{display:flex;gap:8px;margin-top:14px}
-  .btn{flex:1;font-family:'Spectral';font-size:13.5px;text-align:center;color:var(--text);
-    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px;cursor:pointer;transition:.15s}
-  .btn:active{transform:scale(.97)} .btn.primary{background:var(--brass);color:var(--bg);border-color:var(--brass);font-weight:600}
-  .btn.ghost{background:none}
-  .moves{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;
-    padding:10px 12px;max-height:120px;overflow:auto;font-size:13px;line-height:1.9;font-variant-numeric:tabular-nums}
-  .moves .mv{display:inline-block;padding:1px 5px;border-radius:5px;margin-right:2px}
-  .moves .mv.cur{background:var(--brass);color:var(--bg)}
-  .moves .num{color:var(--faint);margin-right:3px}
-  .empty{color:var(--faint);font-size:13px;font-style:italic}
-  /* ---- review list ---- */
-  .glist{display:flex;flex-direction:column;gap:9px}
-  .grow{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);
-    border-radius:12px;padding:13px 15px;cursor:pointer;transition:.15s}
-  .grow:active{transform:scale(.99)} .grow:hover{border-color:var(--brass)}
-  .grow .res{font-family:'Cormorant Garamond';font-size:22px;font-weight:700;width:54px;text-align:center}
-  .grow .res.w{color:var(--brass-lite)} .grow .res.b{color:var(--text)} .grow .res.d{color:var(--muted)}
-  .grow .meta{flex:1;min-width:0}
-  .grow .meta .ttl{font-size:14.5px;font-weight:500}
-  .grow .meta .when{font-size:11.5px;color:var(--faint);margin-top:2px}
-  .grow .arr{color:var(--faint);font-size:18px}
-  /* ---- material bar (review) ---- */
-  .matwrap{margin-top:14px}
-  .matlbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;letter-spacing:.5px}
-  .matbar{height:10px;border-radius:6px;background:var(--pc-black);overflow:hidden;border:1px solid var(--line)}
-  .matbar i{display:block;height:100%;background:linear-gradient(90deg,var(--pc-white),#d8cbac);transition:width .3s}
-  .swing{margin-top:10px;font-size:13px;color:var(--muted);line-height:1.5}
-  .swing b{color:var(--red)}
-  /* ---- puzzle ---- */
-  .pzbadge{display:inline-block;font-size:10px;letter-spacing:2px;text-transform:uppercase;
-    color:var(--brass);border:1px solid var(--brass);border-radius:20px;padding:3px 11px;margin-bottom:10px}
-  .pzmsg{margin-top:12px;text-align:center;font-size:15px;min-height:22px;font-weight:500}
-  .pzmsg.ok{color:var(--green)} .pzmsg.no{color:var(--red)}
-  /* ---- promotion modal ---- */
-  .overlay{position:fixed;inset:0;background:rgba(8,6,4,.7);display:none;align-items:center;justify-content:center;z-index:30}
-  .overlay.show{display:flex}
-  .promo{background:var(--panel2);border:1px solid var(--brass);border-radius:16px;padding:18px 20px;text-align:center}
-  .promo h4{font-family:'Cormorant Garamond';margin:0 0 12px;font-weight:600;font-size:20px}
-  .promo .opts{display:flex;gap:10px}
-  .promo .opts span{font-size:42px;cursor:pointer;color:var(--pc-white);text-shadow:0 1px 3px rgba(0,0,0,.6);
-    padding:4px 8px;border-radius:10px;transition:.15s}
-  .promo .opts span:active{background:var(--brass)}
-  footer{text-align:center;color:var(--faint);font-size:11px;margin-top:26px;letter-spacing:.5px}
-  .hidden{display:none!important}
-</style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
 <div class="wrap">
-  <header class="top">
-    <div class="brand">
-      <span class="glyph">&#9819;</span>
-      <div>
-        <h1>The Gambit Room</h1>
-        <div class="sub">private club</div>
-      </div>
-    </div>
-    <nav class="tabs">
-      <button data-screen="hub" class="active">Hub</button>
-      <button data-screen="play">Play</button>
-      <button data-screen="puzzle">Puzzle</button>
-      <button data-screen="review">Review</button>
-    </nav>
-  </header>
+  <header class="appbar"></header>
 
-  <!-- HUB -->
-  <section class="screen show" id="hub">
-    <h2 class="title">Welcome back.</h2>
-    <p class="lead">Your private corner of the internet. Chess is open for play. Drop new apps into the room whenever you like &mdash; they&rsquo;ll appear here for you and your guests.</p>
-    <div class="cards">
-      <div class="card live" data-go="play">
-        <span class="badge">Open</span>
-        <span class="ico">&#9818;</span>
-        <h3>Chess</h3>
-        <p>Pass &amp; play or face the house. Saved games land in Review.</p>
-      </div>
-      <div class="card live" data-go="puzzle">
-        <span class="badge">Daily</span>
-        <span class="ico">&#9881;</span>
-        <h3>Daily Puzzle</h3>
-        <p>One fresh tactic every day. Find the finish.</p>
-      </div>
-      <div class="card soon">
-        <span class="badge">Soon</span>
-        <span class="ico">&#9824;</span>
-        <h3>Cards Night</h3>
-        <p>A future app slot. This is where the room grows.</p>
-      </div>
-      <div class="card soon">
-        <span class="badge">Soon</span>
-        <span class="ico">&#9851;</span>
-        <h3>Add your own</h3>
-        <p>Wire in whatever you build next, for friends to use.</p>
-      </div>
-    </div>
-  </section>
+  <div class="eyebrow">Members only &middot; established this week</div>
+  <h1 class="title">The Parlour</h1>
+  <p class="lead">A private games room for you, your brother, and whoever you invite. Play chips are on the house &mdash; everyone starts with a stack. Pull up a chair.</p>
 
-  <!-- PLAY -->
-  <section class="screen" id="play">
-    <h2 class="title">The Board</h2>
-    <div class="modes">
-      <span class="pill on" data-mode="pass">Pass &amp; Play</span>
-      <span class="pill" data-mode="cpu">Vs. The House</span>
-      <span class="pill" data-mode="online" disabled title="Coming soon">Online &middot; soon</span>
-    </div>
-    <div class="status">
-      <span class="dot w" id="turnDot"></span>
-      <span class="msg" id="statusMsg">White to move</span>
-    </div>
-    <div class="board-frame">
-      <div class="coords" id="topCoords"></div>
-      <div class="board" id="board"></div>
-    </div>
-    <div class="ctrl">
-      <button class="btn ghost" id="undoBtn">&#8630; Undo</button>
-      <button class="btn primary" id="newBtn">New Game</button>
-      <button class="btn ghost" id="saveBtn">Save to Review</button>
-    </div>
-    <div class="moves" id="moveList"><span class="empty">Moves will appear here&hellip;</span></div>
-  </section>
-
-  <!-- PUZZLE -->
-  <section class="screen" id="puzzle">
-    <h2 class="title">Daily Puzzle</h2>
-    <span class="pzbadge" id="pzMeta">Loading&hellip;</span>
-    <div class="status"><span class="dot" id="pzDot"></span><span class="msg" id="pzTurn"></span></div>
-    <div class="board-frame">
-      <div class="board" id="pzBoard"></div>
-    </div>
-    <div class="pzmsg" id="pzMsg">Find the best move.</div>
-    <div class="ctrl">
-      <button class="btn ghost" id="pzReset">Reset</button>
-      <button class="btn" id="pzHint">Hint</button>
-    </div>
-  </section>
-
-  <!-- REVIEW -->
-  <section class="screen" id="review">
-    <h2 class="title">Review Room</h2>
-    <p class="lead" id="revLead">Your saved games, ready to replay move by move.</p>
-    <div class="glist" id="gameList"></div>
-
-    <div id="reviewer" class="hidden">
-      <div class="ctrl" style="margin-top:0;margin-bottom:14px">
-        <button class="btn ghost" id="backToList">&#8592; All games</button>
-      </div>
-      <div class="board-frame"><div class="board" id="revBoard"></div></div>
-      <div class="matwrap">
-        <div class="matlbl"><span>Material balance</span><span id="matText">even</span></div>
-        <div class="matbar"><i id="matFill" style="width:50%"></i></div>
-        <div class="swing" id="swingNote"></div>
-      </div>
-      <div class="ctrl">
-        <button class="btn" id="revStart">&#124;&#8592;</button>
-        <button class="btn" id="revPrev">&#8592; Prev</button>
-        <button class="btn" id="revNext">Next &#8594;</button>
-        <button class="btn" id="revEnd">&#8594;&#124;</button>
-      </div>
-      <div class="moves" id="revMoves"></div>
-    </div>
-  </section>
-
-  <footer>The Gambit Room &middot; built for two brothers and their friends</footer>
-</div>
-
-<!-- promotion chooser -->
-<div class="overlay" id="promoOverlay">
-  <div class="promo">
-    <h4>Promote to&hellip;</h4>
-    <div class="opts" id="promoOpts"></div>
+  <div class="section-label">The Tables</div>
+  <div class="cards">
+    <a class="card live" href="chess.html">
+      <span class="badge">Online</span>
+      <span class="ico">&#9818;</span>
+      <h3>Chess</h3>
+      <p>Pass &amp; play, face the house, or invite someone with a room code.</p>
+    </a>
+    <a class="card live" href="blackjack.html">
+      <span class="badge">Open</span>
+      <span class="ico">&#9824;</span>
+      <h3>Blackjack</h3>
+      <p>You versus the dealer. Hit, stand, double &mdash; chase the 21.</p>
+    </a>
+    <a class="card live" href="roulette.html">
+      <span class="badge">Open</span>
+      <span class="ico">&#9862;</span>
+      <h3>Roulette</h3>
+      <p>European wheel. Reds, blacks, dozens, or a number with your name on it.</p>
+    </a>
+    <a class="card soon" href="poker.html">
+      <span class="badge">Soon</span>
+      <span class="ico">&#9827;</span>
+      <h3>Poker</h3>
+      <p>Texas Hold&rsquo;em around one virtual table. In the workshop.</p>
+    </a>
   </div>
+
+  <div class="section-label">In the Workshop</div>
+  <div class="cards">
+    <a class="card soon" href="pool.html">
+      <span class="badge">Soon</span>
+      <span class="ico">&#127921;</span>
+      <h3>Pool</h3>
+      <p>8-ball on green felt. Physics in progress.</p>
+    </a>
+    <a class="card soon" href="canasta.html">
+      <span class="badge">Soon</span>
+      <span class="ico">&#127183;</span>
+      <h3>Canasta</h3>
+      <p>The classic rummy night, brought online.</p>
+    </a>
+  </div>
+
+  <footer>The Parlour &middot; play chips only, just for fun &middot; built for family &amp; friends</footer>
 </div>
 
-<script>
-"use strict";
-const GLYPH = { // solid set for both colors, recolored via CSS
-  p:'\u265F', n:'\u265E', b:'\u265D', r:'\u265C', q:'\u265B', k:'\u265A'
-};
-const VAL = {p:1,n:3,b:3,r:5,q:9,k:0};
-const FILES='abcdefgh';
-function hasChess(){ return typeof Chess === 'function'; }
-
-/* ---------------- storage (graceful) ---------------- */
-async function dbList(){
-  try{ const r = await window.storage.list('game:'); return (r&&r.keys)||[]; }
-  catch(e){ return memKeys(); }
-}
-async function dbGet(k){
-  try{ const r = await window.storage.get(k); return r?JSON.parse(r.value):null; }
-  catch(e){ return MEM[k]?JSON.parse(MEM[k]):null; }
-}
-async function dbSet(k,v){
-  try{ await window.storage.set(k, JSON.stringify(v)); }
-  catch(e){ MEM[k]=JSON.stringify(v); }
-}
-const MEM = {};
-function memKeys(){ return Object.keys(MEM); }
-const storageLive = (typeof window.storage === 'object' && window.storage);
-
-/* ---------------- screen nav ---------------- */
-const tabBtns = document.querySelectorAll('nav.tabs button');
-function showScreen(id){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('show', s.id===id));
-  tabBtns.forEach(b=>b.classList.toggle('active', b.dataset.screen===id));
-  if(id==='review') loadGames();
-  if(id==='puzzle') initPuzzle();
-  window.scrollTo({top:0,behavior:'smooth'});
-}
-tabBtns.forEach(b=>b.onclick=()=>showScreen(b.dataset.screen));
-document.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>showScreen(c.dataset.go));
-
-/* ================= PLAY ================= */
-let game, mode='pass', selected=null, legalTargets=[], lastMove=null, pendingPromo=null;
-function newGame(){
-  if(!hasChess()){ document.getElementById('statusMsg').textContent='Chess engine failed to load — check connection.'; return; }
-  game = new Chess(); selected=null; legalTargets=[]; lastMove=null;
-  renderBoard(); updateStatus(); renderMoves();
-}
-function squareName(r,c){ return FILES[c] + (8-r); }
-
-function renderBoard(){
-  const el = document.getElementById('board'); el.innerHTML='';
-  const top = document.getElementById('topCoords');
-  if(top && !top.dataset.done){ top.innerHTML = FILES.split('').map(f=>`<span>${f}</span>`).join(''); top.dataset.done='1'; }
-  const grid = game.board();
-  let checkSq=null;
-  if(game.inCheck()){ // find king of side to move
-    const t=game.turn();
-    grid.forEach((row,r)=>row.forEach((p,c)=>{ if(p&&p.type==='k'&&p.color===t) checkSq=squareName(r,c); }));
-  }
-  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
-    const name = squareName(r,c);
-    const sq = document.createElement('div');
-    sq.className = 'sq '+(((r+c)%2)?'dark':'light');
-    if(lastMove && (lastMove.from===name||lastMove.to===name)) sq.classList.add('last');
-    if(selected===name) sq.classList.add('sel');
-    if(checkSq===name) sq.classList.add('check');
-    const p = grid[r][c];
-    if(p){ const pc=document.createElement('span'); pc.className='piece '+p.color; pc.textContent=GLYPH[p.type]; sq.appendChild(pc); }
-    const tgt = legalTargets.find(m=>m.to===name);
-    if(tgt){ const h=document.createElement('span'); h.className='hint'+((tgt.captured||tgt.flags.includes('e'))?' cap':''); sq.appendChild(h); }
-    sq.onclick=()=>onSquare(name);
-    el.appendChild(sq);
-  }
-}
-function onSquare(name){
-  if(!game || game.isGameOver()) return;
-  if(mode==='cpu' && game.turn()==='b') return; // wait for house
-  const tgt = legalTargets.find(m=>m.to===name);
-  if(tgt){ doMove(tgt); return; }
-  // (re)select
-  const piece = game.get(name);
-  if(piece && piece.color===game.turn()){
-    selected=name;
-    legalTargets=game.moves({square:name, verbose:true});
-  } else { selected=null; legalTargets=[]; }
-  renderBoard();
-}
-function doMove(m){
-  if(m.flags.includes('p')){ // promotion needed
-    pendingPromo={from:m.from,to:m.to}; openPromo(game.turn()); return;
-  }
-  applyMove({from:m.from,to:m.to});
-}
-function applyMove(obj){
-  let res;
-  try{ res = game.move(obj); }catch(e){ res=null; }
-  if(!res) return;
-  lastMove={from:res.from,to:res.to};
-  selected=null; legalTargets=[];
-  renderBoard(); updateStatus(); renderMoves();
-  if(mode==='cpu' && !game.isGameOver() && game.turn()==='b'){
-    setTimeout(houseMove, 420);
-  }
-}
-function houseMove(){
-  const moves = game.moves({verbose:true});
-  if(!moves.length) return;
-  // light heuristic: value captures + checks + promotions, prefer center, else random
-  let best=[], bestScore=-1e9;
-  for(const m of moves){
-    let s = Math.random()*0.6;
-    if(m.captured) s += VAL[m.captured]*2;
-    if(m.flags.includes('p')) s += 8;
-    if(m.san.includes('+')) s += 1.2;
-    if(m.san.includes('#')) s += 999;
-    const cf='cdef'.includes(m.to[0]), cr='3456'.includes(m.to[1]);
-    if(cf&&cr) s+=0.5;
-    if(s>bestScore){bestScore=s;best=[m];} else if(s===bestScore){best.push(m);}
-  }
-  const pick = best[Math.floor(Math.random()*best.length)];
-  const obj = {from:pick.from,to:pick.to};
-  if(pick.flags.includes('p')) obj.promotion='q';
-  game.move(obj); lastMove={from:pick.from,to:pick.to};
-  renderBoard(); updateStatus(); renderMoves();
-}
-function updateStatus(){
-  const dot=document.getElementById('turnDot'), msg=document.getElementById('statusMsg');
-  dot.className='dot '+game.turn(); msg.classList.remove('alert');
-  if(game.isCheckmate()){ msg.textContent=(game.turn()==='w'?'Black':'White')+' wins by checkmate'; msg.classList.add('alert'); dot.style.opacity=.4; return; }
-  if(game.isStalemate()){ msg.textContent='Draw — stalemate'; msg.classList.add('alert'); return; }
-  if(game.isInsufficientMaterial()){ msg.textContent='Draw — insufficient material'; msg.classList.add('alert'); return; }
-  if(game.isThreefoldRepetition()){ msg.textContent='Draw — repetition'; msg.classList.add('alert'); return; }
-  if(game.isDraw()){ msg.textContent='Draw'; msg.classList.add('alert'); return; }
-  dot.style.opacity=1;
-  let t=(game.turn()==='w'?'White':'Black')+' to move';
-  if(game.inCheck()){ t+=' — check!'; msg.classList.add('alert'); }
-  msg.textContent=t;
-}
-function renderMoves(){
-  const ml=document.getElementById('moveList');
-  const hist=game.history();
-  if(!hist.length){ ml.innerHTML='<span class="empty">Moves will appear here&hellip;</span>'; return; }
-  let html='';
-  for(let i=0;i<hist.length;i+=2){
-    html+=`<span class="num">${i/2+1}.</span><span class="mv">${hist[i]}</span>`;
-    if(hist[i+1]) html+=`<span class="mv">${hist[i+1]}</span>`;
-  }
-  ml.innerHTML=html; ml.scrollTop=ml.scrollHeight;
-}
-/* promotion */
-function openPromo(color){
-  const box=document.getElementById('promoOpts'); box.innerHTML='';
-  ['q','r','b','n'].forEach(t=>{ const s=document.createElement('span'); s.className=color; s.textContent=GLYPH[t]; s.style.color=(color==='w'?'var(--pc-white)':'var(--pc-black)'); s.onclick=()=>{ document.getElementById('promoOverlay').classList.remove('show'); applyMove({from:pendingPromo.from,to:pendingPromo.to,promotion:t}); pendingPromo=null; }; box.appendChild(s); });
-  document.getElementById('promoOverlay').classList.add('show');
-}
-/* mode pills */
-document.querySelectorAll('#play .pill').forEach(p=>{
-  if(p.hasAttribute('disabled')) return;
-  p.onclick=()=>{ document.querySelectorAll('#play .pill').forEach(x=>x.classList.remove('on')); p.classList.add('on'); mode=p.dataset.mode; newGame(); };
-});
-document.getElementById('newBtn').onclick=newGame;
-document.getElementById('undoBtn').onclick=()=>{ if(!game)return; game.undo(); if(mode==='cpu'&&game.turn()==='b'&&game.history().length) game.undo(); const h=game.history({verbose:true}); lastMove=h.length?{from:h[h.length-1].from,to:h[h.length-1].to}:null; selected=null;legalTargets=[]; renderBoard();updateStatus();renderMoves(); };
-document.getElementById('saveBtn').onclick=saveCurrentGame;
-async function saveCurrentGame(){
-  if(!game || game.history().length===0){ flashBtn('saveBtn','Nothing to save'); return; }
-  const hist=game.history({verbose:true});
-  let result='*';
-  if(game.isCheckmate()) result=(game.turn()==='w'?'0-1':'1-0');
-  else if(game.isDraw()||game.isStalemate()) result='1/2-1/2';
-  const rec={ id:'game:'+Date.now(), date:Date.now(), mode, result, pgn:game.pgn(),
-    moves:hist.map(m=>({san:m.san,from:m.from,to:m.to})) };
-  await dbSet(rec.id, rec);
-  flashBtn('saveBtn','Saved \u2713');
-}
-function flashBtn(id,txt){ const b=document.getElementById(id); const o=b.textContent; b.textContent=txt; setTimeout(()=>b.textContent=o,1400); }
-
-/* ================= PUZZLE ================= */
-const PUZZLES=[
-  {fen:'6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1', sol:'Ra8#', tip:'The back rank is fatally weak.'},
-  {fen:'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 0 1', sol:'Qxf7#', tip:'f7 is the softest square in the position.'},
-  {fen:'k7/8/1K6/8/8/8/8/7R w - - 0 1', sol:'Rh8#', tip:'Box the king against the edge.'},
-  {fen:'6k1/4Rppp/8/8/8/8/5PPP/6K1 w - - 0 1', sol:'Re8#', tip:'The rook delivers it alone.'},
-  {fen:'7k/6pp/8/8/8/8/8/5R1K w - - 0 1', sol:'Rf8#', tip:'Slide along the back rank.'},
-  {fen:'1k6/1P6/1K6/8/8/8/8/3R4 w - - 0 1', sol:'Rd8#', tip:'Your pawn does the blocking.'}
-];
-let pz, pzPuzzle, pzSel=null, pzTargets=[], pzSolved=false;
-function todayIndex(){ const d=new Date(); const n=Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5); return n%PUZZLES.length; }
-function initPuzzle(){
-  if(!hasChess()){ document.getElementById('pzMeta').textContent='Engine offline'; return; }
-  pzPuzzle=PUZZLES[todayIndex()];
-  pz=new Chess(pzPuzzle.fen); pzSel=null;pzTargets=[];pzSolved=false;
-  const dt=new Date();
-  document.getElementById('pzMeta').textContent='Mate in 1 \u00b7 '+dt.toLocaleDateString(undefined,{month:'short',day:'numeric'});
-  document.getElementById('pzDot').className='dot '+pz.turn();
-  document.getElementById('pzTurn').textContent=(pz.turn()==='w'?'White':'Black')+' to move and win';
-  document.getElementById('pzMsg').textContent='Find the best move.'; document.getElementById('pzMsg').className='pzmsg';
-  renderPz();
-}
-function renderPz(){
-  const el=document.getElementById('pzBoard'); el.innerHTML='';
-  const grid=pz.board();
-  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
-    const name=squareName(r,c);
-    const sq=document.createElement('div');
-    sq.className='sq '+(((r+c)%2)?'dark':'light');
-    if(pzSel===name) sq.classList.add('sel');
-    const p=grid[r][c];
-    if(p){const pc=document.createElement('span');pc.className='piece '+p.color;pc.textContent=GLYPH[p.type];sq.appendChild(pc);}
-    if(pzTargets.find(m=>m.to===name)){const h=document.createElement('span');h.className='hint';sq.appendChild(h);}
-    sq.onclick=()=>onPz(name);
-    el.appendChild(sq);
-  }
-}
-function onPz(name){
-  if(pzSolved) return;
-  const tgt=pzTargets.find(m=>m.to===name);
-  if(tgt){
-    let obj={from:tgt.from,to:tgt.to}; if(tgt.flags.includes('p'))obj.promotion='q';
-    const res=pz.move(obj);
-    if(res && res.san===pzPuzzle.sol){ pzSolved=true; pzSel=null;pzTargets=[]; renderPz();
-      const m=document.getElementById('pzMsg'); m.textContent='\u2713 Brilliant — that\u2019s mate!'; m.className='pzmsg ok';
-    } else { pz.undo(); const m=document.getElementById('pzMsg'); m.textContent='Not quite. Look again.'; m.className='pzmsg no'; pzSel=null;pzTargets=[];renderPz(); }
-    return;
-  }
-  const p=pz.get(name);
-  if(p&&p.color===pz.turn()){ pzSel=name; pzTargets=pz.moves({square:name,verbose:true}); }
-  else { pzSel=null; pzTargets=[]; }
-  renderPz();
-}
-document.getElementById('pzReset').onclick=initPuzzle;
-document.getElementById('pzHint').onclick=()=>{ const m=document.getElementById('pzMsg'); m.textContent='Hint: '+pzPuzzle.tip; m.className='pzmsg'; };
-
-/* ================= REVIEW ================= */
-async function loadGames(){
-  const list=document.getElementById('gameList');
-  document.getElementById('reviewer').classList.add('hidden');
-  list.classList.remove('hidden');
-  list.innerHTML='<div class="empty">Loading&hellip;</div>';
-  const keys=await dbList();
-  if(!keys.length){ list.innerHTML='<div class="empty">No saved games yet. Finish a game in Play, then tap &ldquo;Save to Review.&rdquo;</div>'+(storageLive?'':'<div class="empty" style="margin-top:8px">(Heads up: saving works on your live website. In this preview it&rsquo;s kept only for this session.)</div>'); return; }
-  const recs=[];
-  for(const k of keys){ const r=await dbGet(k); if(r) recs.push(r); }
-  recs.sort((a,b)=>b.date-a.date);
-  list.innerHTML='';
-  recs.forEach(r=>{
-    const row=document.createElement('div'); row.className='grow';
-    let rc='d', rt='&frac12;'; if(r.result==='1-0'){rc='w';rt='1&ndash;0';} else if(r.result==='0-1'){rc='b';rt='0&ndash;1';} else if(r.result==='*'){rc='d';rt='&middot;';}
-    const dt=new Date(r.date);
-    row.innerHTML=`<div class="res ${rc}">${rt}</div>
-      <div class="meta"><div class="ttl">${r.mode==='cpu'?'You vs. The House':'Pass &amp; Play'} &middot; ${r.moves.length} half-moves</div>
-      <div class="when">${dt.toLocaleDateString(undefined,{month:'short',day:'numeric'})} &middot; ${dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div></div>
-      <div class="arr">&#8250;</div>`;
-    row.onclick=()=>openReview(r);
-    list.appendChild(row);
-  });
-}
-let rv, rvMoves=[], rvIdx=0, rvMatSeries=[];
-function openReview(rec){
-  document.getElementById('gameList').classList.add('hidden');
-  document.getElementById('reviewer').classList.remove('hidden');
-  rvMoves=rec.moves; rvIdx=0;
-  // build material series by replaying
-  rv=new Chess(); rvMatSeries=[material(rv)];
-  const tmp=new Chess();
-  rvMoves.forEach(m=>{ tmp.move({from:m.from,to:m.to,promotion:'q'}); rvMatSeries.push(material(tmp)); });
-  drawReview();
-}
-function material(c){ // white minus black, in pawns
-  let w=0,b=0; c.board().forEach(row=>row.forEach(p=>{ if(p){ if(p.color==='w')w+=VAL[p.type]; else b+=VAL[p.type]; } })); return w-b;
-}
-function positionAt(idx){ const c=new Chess(); for(let i=0;i<idx;i++) c.move({from:rvMoves[i].from,to:rvMoves[i].to,promotion:'q'}); return c; }
-function drawReview(){
-  const c=positionAt(rvIdx);
-  const el=document.getElementById('revBoard'); el.innerHTML='';
-  const grid=c.board();
-  let lm=null; if(rvIdx>0) lm={from:rvMoves[rvIdx-1].from,to:rvMoves[rvIdx-1].to};
-  for(let r=0;r<8;r++)for(let cc=0;cc<8;cc++){
-    const name=squareName(r,cc); const sq=document.createElement('div');
-    sq.className='sq '+(((r+cc)%2)?'dark':'light');
-    if(lm&&(lm.from===name||lm.to===name)) sq.classList.add('last');
-    const p=grid[r][cc]; if(p){const pc=document.createElement('span');pc.className='piece '+p.color;pc.textContent=GLYPH[p.type];sq.appendChild(pc);}
-    el.appendChild(sq);
-  }
-  // material bar
-  const bal=rvMatSeries[rvIdx]; const pct=Math.max(5,Math.min(95,50+bal*5));
-  document.getElementById('matFill').style.width=pct+'%';
-  document.getElementById('matText').textContent = bal===0?'even':(bal>0?('White +'+bal):('Black +'+(-bal)));
-  // swing note: compare to previous ply
-  const sn=document.getElementById('swingNote');
-  if(rvIdx>0){
-    const swing = rvMatSeries[rvIdx]-rvMatSeries[rvIdx-1];
-    const mover = (rvIdx%2)?'White':'Black'; // ply rvIdx-1 was made by...
-    const lastMover=((rvIdx-1)%2===0)?'White':'Black';
-    if(Math.abs(swing)>=3){ sn.innerHTML=`<b>Big swing.</b> After ${lastMover}&rsquo;s ${rvMoves[rvIdx-1].san}, material shifted by ${Math.abs(swing)} points. Worth a closer look.`; }
-    else if(Math.abs(swing)===2){ sn.innerHTML=`A 2-point exchange happened on ${rvMoves[rvIdx-1].san}.`; }
-    else sn.textContent='';
-  } else sn.textContent='';
-  // move list
-  const ml=document.getElementById('revMoves'); let html='';
-  for(let i=0;i<rvMoves.length;i+=2){ html+=`<span class="num">${i/2+1}.</span>`; html+=`<span class="mv ${rvIdx===i+1?'cur':''}">${rvMoves[i].san}</span>`; if(rvMoves[i+1]) html+=`<span class="mv ${rvIdx===i+2?'cur':''}">${rvMoves[i+1].san}</span>`; }
-  ml.innerHTML=html;
-}
-document.getElementById('backToList').onclick=loadGames;
-document.getElementById('revStart').onclick=()=>{rvIdx=0;drawReview();};
-document.getElementById('revPrev').onclick=()=>{if(rvIdx>0){rvIdx--;drawReview();}};
-document.getElementById('revNext').onclick=()=>{if(rvIdx<rvMoves.length){rvIdx++;drawReview();}};
-document.getElementById('revEnd').onclick=()=>{rvIdx=rvMoves.length;drawReview();};
-
-/* ---------------- boot ---------------- */
-function boot(){ if(hasChess()){ newGame(); } else { setTimeout(boot,150); } }
-boot();
+<script type="module">
+  import { ensurePlayer, renderHeader } from './common.js';
+  await ensurePlayer();
+  renderHeader('index.html');
 </script>
 </body>
 </html>

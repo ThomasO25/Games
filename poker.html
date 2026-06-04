@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Poker · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar"></header>
+  <div class="workshop">
+    <div class="big">♣</div>
+    <h2 class="title">Poker</h2>
+    <p class="lead" style="max-width:380px;margin:8px auto 22px">Texas Hold'em around one shared virtual table. This one needs real-time multiplayer like online chess — a shared hand state in Firebase, dealing, betting rounds, and showdown logic.</p>
+    <a class="btn primary" href="index.html">← Back to the Parlour</a>
+    <p class="note" style="max-width:360px;margin:20px auto 0">This page is wired into the site and the wallet already — when the game logic is built, it drops right in here.</p>
+  </div>
+  <footer>The Parlour</footer>
+</div>
+<script type="module">
+  import { ensurePlayer, renderHeader } from './common.js';
+  await ensurePlayer();
+  renderHeader('poker.html');
+</script>
+</body>
+</html>

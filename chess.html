@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Chess · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.4.0/chess.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar"></header>
+  <h2 class="title">Chess</h2>
+
+  <div class="modes" id="modes">
+    <span class="pill on" data-mode="pass">Pass &amp; Play</span>
+    <span class="pill" data-mode="cpu">Vs. The House</span>
+    <span class="pill" data-mode="online">Online</span>
+  </div>
+
+  <!-- online lobby -->
+  <div class="panel hidden" id="lobby">
+    <div class="row">
+      <button class="btn primary" id="createBtn">Create a room</button>
+      <button class="btn" id="joinToggle">Join with code</button>
+    </div>
+    <div id="joinFields" class="hidden" style="margin-top:12px">
+      <input class="field" id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off"/>
+      <button class="btn primary" id="joinBtn" style="width:100%;margin-top:10px">Join</button>
+    </div>
+    <div class="note" id="lobbyNote">Create a room, then send the 4-letter code to your opponent.</div>
+  </div>
+
+  <div class="status">
+    <span class="dot w" id="turnDot"></span>
+    <span class="msg" id="statusMsg">White to move</span>
+  </div>
+
+  <div class="board-frame">
+    <div class="coords" id="topCoords"></div>
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="row" style="margin-top:14px">
+    <button class="btn ghost" id="undoBtn">&#8630; Undo</button>
+    <button class="btn primary" id="newBtn">New Game</button>
+    <button class="btn ghost" id="flipBtn">Flip</button>
+  </div>
+  <div class="moves" id="moveList"><span class="empty">Moves will appear here…</span></div>
+
+  <footer>Pass &amp; Play and Vs. The House work offline. Online needs the page hosted over https.</footer>
+</div>
+
+<div class="overlay" id="promoOverlay">
+  <div class="modal"><h4>Promote to…</h4><div class="promo-opts" id="promoOpts"></div></div>
+</div>
+
+<script type="module">
+import { ensurePlayer, renderHeader, playerId, playerName } from './common.js';
+import { db, doc, getDoc, setDoc, updateDoc, onSnapshot } from './firebase.js';
+
+await ensurePlayer();
+renderHeader('chess.html');
+
+const Chess = window.Chess;
+const GLYPH={p:'\u265F',n:'\u265E',b:'\u265D',r:'\u265C',q:'\u265B',k:'\u265A'};
+const VAL={p:1,n:3,b:3,r:5,q:9,k:0};
+const FILES='abcdefgh';
+
+let game, mode='pass', selected=null, legalTargets=[], lastMove=null, pendingPromo=null, flip=false;
+let online=null; // {code, color, white, black, moves, unsub}
+
+function squareName(r,c){ return FILES[c] + (8-r); }
+function newGame(){
+  game=new Chess(); selected=null; legalTargets=[]; lastMove=null;
+  renderBoard(); updateStatus(); renderMoves();
+}
+function rebuildFromMoves(moves){
+  game=new Chess();
+  for(const m of moves){ try{ game.move(m.promotion?{from:m.from,to:m.to,promotion:m.promotion}:{from:m.from,to:m.to}); }catch(e){} }
+  const h=game.history({verbose:true}); lastMove=h.length?{from:h[h.length-1].from,to:h[h.length-1].to}:null;
+  selected=null; legalTargets=[];
+}
+
+function renderBoard(){
+  const el=document.getElementById('board'); el.innerHTML='';
+  const top=document.getElementById('topCoords');
+  if(top && !top.dataset.done){ top.innerHTML=FILES.split('').map(f=>`<span>${f}</span>`).join(''); top.dataset.done='1'; }
+  const grid=game.board();
+  let checkSq=null;
+  if(game.inCheck()){ const t=game.turn(); grid.forEach((row,r)=>row.forEach((p,c)=>{ if(p&&p.type==='k'&&p.color===t) checkSq=squareName(r,c); })); }
+  const order=[...Array(8).keys()];
+  const rows = flip ? [...order].reverse() : order;
+  const cols = flip ? [...order].reverse() : order;
+  for(const r of rows) for(const c of cols){
+    const name=squareName(r,c);
+    const sq=document.createElement('div');
+    sq.className='sq '+(((r+c)%2)?'dark':'light');
+    if(lastMove&&(lastMove.from===name||lastMove.to===name)) sq.classList.add('last');
+    if(selected===name) sq.classList.add('sel');
+    if(checkSq===name) sq.classList.add('check');
+    const p=grid[r][c];
+    if(p){ const pc=document.createElement('span'); pc.className='piece '+p.color; pc.textContent=GLYPH[p.type]; sq.appendChild(pc); }
+    const tgt=legalTargets.find(m=>m.to===name);
+    if(tgt){ const h=document.createElement('span'); h.className='hint'+((tgt.captured||tgt.flags.includes('e'))?' cap':''); sq.appendChild(h); }
+    sq.onclick=()=>onSquare(name);
+    el.appendChild(sq);
+  }
+}
+
+function myTurnOnline(){ return online && online.color===game.turn(); }
+
+function onSquare(name){
+  if(!game||game.isGameOver()) return;
+  if(mode==='cpu' && game.turn()==='b') return;
+  if(mode==='online'){ if(!online || !online.color) return; if(!online.black){ return; } if(!myTurnOnline()) return; }
+  const tgt=legalTargets.find(m=>m.to===name);
+  if(tgt){ doMove(tgt); return; }
+  const piece=game.get(name);
+  if(piece && piece.color===game.turn() && (mode!=='online' || piece.color===online.color)){
+    selected=name; legalTargets=game.moves({square:name,verbose:true});
+  } else { selected=null; legalTargets=[]; }
+  renderBoard();
+}
+function doMove(m){
+  if(m.flags.includes('p')){ pendingPromo={from:m.from,to:m.to}; openPromo(game.turn()); return; }
+  applyMove({from:m.from,to:m.to});
+}
+async function applyMove(obj){
+  let res; try{ res=game.move(obj); }catch(e){ res=null; }
+  if(!res) return;
+  lastMove={from:res.from,to:res.to}; selected=null; legalTargets=[];
+  if(mode==='online' && online){
+    const mv={from:res.from,to:res.to}; if(obj.promotion) mv.promotion=obj.promotion;
+    const newMoves=[...online.moves, mv];
+    online.moves=newMoves;
+    try{ await updateDoc(doc(db,'matches',online.code), { moves:newMoves }); }catch(e){ console.warn(e); }
+    renderBoard(); updateStatus(); renderMoves();
+    return;
+  }
+  renderBoard(); updateStatus(); renderMoves();
+  if(mode==='cpu' && !game.isGameOver() && game.turn()==='b') setTimeout(houseMove, 420);
+}
+function houseMove(){
+  const moves=game.moves({verbose:true}); if(!moves.length) return;
+  let best=[], bestScore=-1e9;
+  for(const m of moves){
+    let s=Math.random()*0.6;
+    if(m.captured) s+=VAL[m.captured]*2;
+    if(m.flags.includes('p')) s+=8;
+    if(m.san.includes('#')) s+=999; else if(m.san.includes('+')) s+=1.2;
+    if('cdef'.includes(m.to[0])&&'3456'.includes(m.to[1])) s+=0.5;
+    if(s>bestScore){bestScore=s;best=[m];} else if(s===bestScore) best.push(m);
+  }
+  const pick=best[Math.floor(Math.random()*best.length)];
+  const obj={from:pick.from,to:pick.to}; if(pick.flags.includes('p')) obj.promotion='q';
+  game.move(obj); lastMove={from:pick.from,to:pick.to};
+  renderBoard(); updateStatus(); renderMoves();
+}
+function updateStatus(){
+  const dot=document.getElementById('turnDot'), msg=document.getElementById('statusMsg');
+  dot.className='dot '+game.turn(); msg.classList.remove('alert'); dot.style.opacity=1;
+  if(game.isCheckmate()){ msg.textContent=(game.turn()==='w'?'Black':'White')+' wins by checkmate'; msg.classList.add('alert'); dot.style.opacity=.4; return; }
+  if(game.isStalemate()){ msg.textContent='Draw — stalemate'; msg.classList.add('alert'); return; }
+  if(game.isInsufficientMaterial()){ msg.textContent='Draw — insufficient material'; msg.classList.add('alert'); return; }
+  if(game.isDraw()){ msg.textContent='Draw'; msg.classList.add('alert'); return; }
+  let t=(game.turn()==='w'?'White':'Black')+' to move';
+  if(mode==='online' && online){
+    if(!online.black){ t='Room '+online.code+' — waiting for opponent…'; msg.classList.add('alert'); }
+    else t = myTurnOnline() ? 'Your move ('+(online.color==='w'?'White':'Black')+')' : 'Waiting for opponent…';
+  }
+  if(game.inCheck() && !game.isGameOver()){ t+=' — check!'; msg.classList.add('alert'); }
+  msg.textContent=t;
+}
+function renderMoves(){
+  const ml=document.getElementById('moveList'); const hist=game.history();
+  if(!hist.length){ ml.innerHTML='<span class="empty">Moves will appear here…</span>'; return; }
+  let html='';
+  for(let i=0;i<hist.length;i+=2){ html+=`<span class="num">${i/2+1}.</span><span class="mv">${hist[i]}</span>`; if(hist[i+1]) html+=`<span class="mv">${hist[i+1]}</span>`; }
+  ml.innerHTML=html; ml.scrollTop=ml.scrollHeight;
+}
+function openPromo(color){
+  const box=document.getElementById('promoOpts'); box.innerHTML='';
+  ['q','r','b','n'].forEach(t=>{ const s=document.createElement('span'); s.textContent=GLYPH[t];
+    s.style.color=(color==='w'?'var(--pc-white)':'var(--pc-black)');
+    s.onclick=()=>{ document.getElementById('promoOverlay').classList.remove('show'); applyMove({from:pendingPromo.from,to:pendingPromo.to,promotion:t}); pendingPromo=null; };
+    box.appendChild(s); });
+  document.getElementById('promoOverlay').classList.add('show');
+}
+
+/* ---- mode switching ---- */
+document.querySelectorAll('#modes .pill').forEach(p=>{
+  p.onclick=()=>{
+    document.querySelectorAll('#modes .pill').forEach(x=>x.classList.remove('on')); p.classList.add('on');
+    mode=p.dataset.mode;
+    document.getElementById('lobby').classList.toggle('hidden', mode!=='online');
+    if(online && online.unsub){ online.unsub(); online=null; }
+    if(mode==='online'){ flip=false; newGame(); document.getElementById('statusMsg').textContent='Create or join a room.'; }
+    else newGame();
+  };
+});
+document.getElementById('newBtn').onclick=()=>{ if(mode==='online'){ alert('Use “Create a room” to start a fresh online game.'); return; } newGame(); };
+document.getElementById('flipBtn').onclick=()=>{ flip=!flip; renderBoard(); };
+document.getElementById('undoBtn').onclick=()=>{
+  if(mode==='online'){ alert('No takebacks in online play — play it out!'); return; }
+  if(!game) return; game.undo();
+  if(mode==='cpu'&&game.turn()==='b'&&game.history().length) game.undo();
+  const h=game.history({verbose:true}); lastMove=h.length?{from:h[h.length-1].from,to:h[h.length-1].to}:null;
+  selected=null;legalTargets=[]; renderBoard();updateStatus();renderMoves();
+};
+
+/* ---- online lobby ---- */
+function genCode(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZ'; let s=''; for(let i=0;i<4;i++) s+=A[Math.floor(Math.random()*A.length)]; return s; }
+document.getElementById('joinToggle').onclick=()=>document.getElementById('joinFields').classList.toggle('hidden');
+document.getElementById('createBtn').onclick=async ()=>{
+  const code=genCode();
+  try{
+    await setDoc(doc(db,'matches',code), { white:playerName(), whiteId:playerId(), black:null, blackId:null, moves:[], createdAt:Date.now() });
+  }catch(e){ document.getElementById('lobbyNote').textContent='Could not reach Firebase — is the page hosted over https?'; return; }
+  startOnline(code,'w');
+  document.getElementById('lobbyNote').innerHTML='Your room code is <b style="color:var(--brass-lite);letter-spacing:2px">'+code+'</b> — send it to your opponent. You play White.';
+};
+document.getElementById('joinBtn').onclick=async ()=>{
+  const code=(document.getElementById('codeInput').value||'').trim().toUpperCase();
+  if(code.length<4){ return; }
+  let snap; try{ snap=await getDoc(doc(db,'matches',code)); }catch(e){ document.getElementById('lobbyNote').textContent='Could not reach Firebase.'; return; }
+  if(!snap.exists()){ document.getElementById('lobbyNote').textContent='No room with that code.'; return; }
+  const d=snap.data(); let color;
+  if(d.whiteId===playerId()) color='w';
+  else if(d.blackId===playerId()) color='b';
+  else if(!d.blackId){ await updateDoc(doc(db,'matches',code), { black:playerName(), blackId:playerId() }); color='b'; }
+  else { document.getElementById('lobbyNote').textContent='That room is full.'; return; }
+  startOnline(code,color);
+  document.getElementById('lobbyNote').innerHTML='Joined room <b style="color:var(--brass-lite)">'+code+'</b>. You play '+(color==='w'?'White':'Black')+'.';
+};
+function startOnline(code,color){
+  if(online && online.unsub) online.unsub();
+  flip = (color==='b');
+  online={ code, color, white:null, black:null, moves:[], unsub:null };
+  online.unsub = onSnapshot(doc(db,'matches',code), snap=>{
+    if(!snap.exists()) return;
+    const d=snap.data();
+    online.white=d.white; online.black=d.black; online.moves=d.moves||[];
+    rebuildFromMoves(online.moves);
+    renderBoard(); updateStatus(); renderMoves();
+  });
+}
+
+newGame();
+</script>
+</body>
+</html>

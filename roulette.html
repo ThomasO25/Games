@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Roulette · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+<style>
+  .wheelface{width:120px;height:120px;border-radius:50%;margin:0 auto 10px;
+    border:8px solid var(--walnut-d);display:flex;align-items:center;justify-content:center;
+    font-family:'Cormorant Garamond';font-weight:700;font-size:46px;color:#fff;
+    box-shadow:inset 0 0 30px rgba(0,0,0,.5),var(--shadow);transition:background .2s}
+  .wheelface.red{background:radial-gradient(circle at 40% 35%,#d9603f,#9a2f17)}
+  .wheelface.black{background:radial-gradient(circle at 40% 35%,#39352a,#15130d)}
+  .wheelface.green{background:radial-gradient(circle at 40% 35%,#3f9a5a,#1a5a30)}
+  .numgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:14px 0}
+  .ncell{aspect-ratio:1.6/1;border-radius:7px;display:flex;align-items:center;justify-content:center;
+    font-weight:600;font-size:15px;color:#fff;cursor:pointer;position:relative;border:1px solid rgba(0,0,0,.3)}
+  .ncell.red{background:#9a2f17}.ncell.black{background:#1c1a14}.ncell.green{background:#1a5a30;grid-column:1/4}
+  .ncell:active{transform:scale(.95)}
+  .ncell .bchip{position:absolute;top:-6px;right:-6px;background:var(--brass);color:#3a2a0a;
+    font-size:10px;font-weight:700;border-radius:20px;padding:1px 6px;border:1px solid #8a6d28}
+  .outside{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:6px}
+  .obet{padding:11px 4px;text-align:center;border-radius:7px;background:var(--panel);border:1px solid var(--line);
+    font-size:12.5px;cursor:pointer;color:var(--text);position:relative}
+  .obet.red{background:#7a2412}.obet.black{background:#1c1a14}
+  .obet:active{transform:scale(.97)}
+  .obet .bchip{position:absolute;top:-6px;right:-6px;background:var(--brass);color:#3a2a0a;font-size:10px;font-weight:700;border-radius:20px;padding:1px 6px}
+  .chipsel{display:flex;gap:8px;justify-content:center;margin:6px 0 12px}
+  .chipsel .chipbtn.sel{outline:3px solid var(--brass-lite);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar"></header>
+  <h2 class="title">Roulette</h2>
+  <p class="lead">European single-zero wheel. Pick a chip, place it on numbers or outside bets, then spin.</p>
+
+  <div class="felt">
+    <div class="wheelface green" id="wheel">–</div>
+    <div class="banner" id="banner"></div>
+    <div class="tally">TOTAL ON TABLE <b id="totalBet">0</b></div>
+  </div>
+
+  <div class="chipsel" id="chipSel">
+    <div class="chipbtn c5" data-v="5">5</div>
+    <div class="chipbtn c25 sel" data-v="25">25</div>
+    <div class="chipbtn c100" data-v="100">100</div>
+    <div class="chipbtn c500" data-v="500">500</div>
+  </div>
+
+  <div class="outside">
+    <div class="obet" data-bet="d1">1st 12</div>
+    <div class="obet" data-bet="d2">2nd 12</div>
+    <div class="obet" data-bet="d3">3rd 12</div>
+  </div>
+  <div class="outside">
+    <div class="obet" data-bet="low">1–18</div>
+    <div class="obet" data-bet="even">Even</div>
+    <div class="obet red" data-bet="red">Red</div>
+  </div>
+  <div class="outside">
+    <div class="obet black" data-bet="black">Black</div>
+    <div class="obet" data-bet="odd">Odd</div>
+    <div class="obet" data-bet="high">19–36</div>
+  </div>
+
+  <div class="numgrid" id="numgrid"></div>
+
+  <div class="row">
+    <button class="btn ghost" id="clearBtn">Clear bets</button>
+    <button class="btn primary" id="spinBtn">Spin</button>
+  </div>
+
+  <div class="panel hidden" id="brokeUI" style="margin-top:14px;text-align:center">
+    <p style="margin:0 0 10px;color:var(--muted)">Out of chips!</p>
+    <button class="btn primary" id="topUpBtn">Top up (+1,000)</button>
+  </div>
+  <footer>Play chips only. The Parlour.</footer>
+</div>
+
+<script type="module">
+import { ensurePlayer, renderHeader, watchWallet, changeChips, topUp } from './common.js';
+await ensurePlayer();
+renderHeader('roulette.html');
+
+const RED=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+let chips=0, active=25, bets={}, spinning=false;
+watchWallet(w=>{ chips=w.chips??0; document.getElementById('brokeUI').classList.toggle('hidden', chips>0); });
+
+function colorOf(n){ return n===0?'green':(RED.has(n)?'red':'black'); }
+function total(){ return Object.values(bets).reduce((a,b)=>a+b,0); }
+
+/* build number grid 0, then 1..36 in three columns */
+const grid=document.getElementById('numgrid');
+const zero=document.createElement('div'); zero.className='ncell green'; zero.textContent='0'; zero.dataset.bet='n:0'; grid.appendChild(zero);
+for(let n=1;n<=36;n++){ const c=document.createElement('div'); c.className='ncell '+colorOf(n); c.textContent=n; c.dataset.bet='n:'+n; grid.appendChild(c); }
+
+function place(id){
+  if(spinning) return;
+  if(total()+active>chips){ flash('Not enough chips'); return; }
+  bets[id]=(bets[id]||0)+active; refresh();
+}
+document.querySelectorAll('[data-bet]').forEach(el=> el.onclick=()=>place(el.dataset.bet));
+document.querySelectorAll('#chipSel .chipbtn').forEach(b=> b.onclick=()=>{ active=Number(b.dataset.v); document.querySelectorAll('#chipSel .chipbtn').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); });
+document.getElementById('clearBtn').onclick=()=>{ if(spinning)return; bets={}; refresh(); };
+
+function refresh(){
+  document.getElementById('totalBet').textContent=total().toLocaleString();
+  document.querySelectorAll('[data-bet]').forEach(el=>{
+    const id=el.dataset.bet; let chip=el.querySelector('.bchip');
+    if(bets[id]){ if(!chip){ chip=document.createElement('span'); chip.className='bchip'; el.appendChild(chip);} chip.textContent=bets[id]; }
+    else if(chip) chip.remove();
+  });
+}
+function won(id,n){
+  if(id.startsWith('n:')) return Number(id.slice(2))===n ? 35 : -1;
+  switch(id){
+    case 'red': return n!==0&&RED.has(n)?1:-1;
+    case 'black': return n!==0&&!RED.has(n)?1:-1;
+    case 'even': return n!==0&&n%2===0?1:-1;
+    case 'odd': return n%2===1?1:-1;
+    case 'low': return n>=1&&n<=18?1:-1;
+    case 'high': return n>=19&&n<=36?1:-1;
+    case 'd1': return n>=1&&n<=12?2:-1;
+    case 'd2': return n>=13&&n<=24?2:-1;
+    case 'd3': return n>=25&&n<=36?2:-1;
+  }
+  return -1;
+}
+function flash(t){ const b=document.getElementById('banner'); b.textContent=t; b.className='banner push'; }
+
+document.getElementById('spinBtn').onclick=async ()=>{
+  if(spinning) return; const stake=total(); if(stake<=0){ flash('Place a bet first'); return; }
+  spinning=true; await changeChips(-stake);
+  const result=Math.floor(Math.random()*37);
+  const wheel=document.getElementById('wheel'); const banner=document.getElementById('banner');
+  banner.textContent='Spinning…'; banner.className='banner';
+  let ticks=0; const iv=setInterval(()=>{
+    const f=Math.floor(Math.random()*37); wheel.textContent=f; wheel.className='wheelface '+colorOf(f);
+    if(++ticks>18){ clearInterval(iv); settle(result); }
+  },70);
+  function settle(n){
+    wheel.textContent=n; wheel.className='wheelface '+colorOf(n);
+    let give=0;
+    for(const [id,amt] of Object.entries(bets)){ const r=won(id,n); if(r>0) give+=amt*(r+1); }
+    const net=give-stake;
+    banner.textContent = give>0 ? `${n} — you win ${give.toLocaleString()}! (${net>=0?'+':''}${net.toLocaleString()})` : `${n} — no luck this time`;
+    banner.className='banner '+(net>0?'win':(net<0?'lose':'push'));
+    if(give>0) changeChips(give);
+    bets={}; refresh(); spinning=false;
+  }
+};
+document.getElementById('topUpBtn').onclick=async ()=>{ await topUp(); };
+refresh();
+</script>
+</body>
+</html>
