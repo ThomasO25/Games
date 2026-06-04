@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Chess · The Parlour</title>
 <link rel="stylesheet" href="styles.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.4.0/chess.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -59,11 +58,11 @@
 <script type="module">
 import { ensurePlayer, renderHeader, playerId, playerName } from './common.js';
 import { db, doc, getDoc, setDoc, updateDoc, onSnapshot } from './firebase.js';
+import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
 
 await ensurePlayer();
 renderHeader('chess.html');
 
-const Chess = window.Chess;
 const GLYPH={p:'\u265F',n:'\u265E',b:'\u265D',r:'\u265C',q:'\u265B',k:'\u265A'};
 const VAL={p:1,n:3,b:3,r:5,q:9,k:0};
 const FILES='abcdefgh';

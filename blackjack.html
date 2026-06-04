@@ -5,14 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Blackjack · The Parlour</title>
 <link rel="stylesheet" href="styles.css"/>
+<style>
+  .shoerow{display:flex;align-items:flex-end;gap:14px;justify-content:flex-end;margin-bottom:8px}
+  .shoe{width:46px;height:80px;border:2px solid var(--walnut-d);border-radius:5px;background:#0e0c08;
+    position:relative;overflow:hidden;box-shadow:inset 0 0 8px rgba(0,0,0,.6)}
+  .shoe .fill{position:absolute;left:0;right:0;bottom:0;
+    background:repeating-linear-gradient(0deg,#5b3a26 0,#5b3a26 2px,#6b4530 2px,#6b4530 4px);
+    border-top:2px solid var(--brass);transition:height .35s ease}
+  .shoeinfo{text-align:right;font-variant-numeric:tabular-nums;line-height:1.25}
+  .shoeinfo .n{font-family:'Cormorant Garamond';font-size:24px;font-weight:700;color:var(--brass-lite)}
+  .shoeinfo .sub{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint)}
+  .shoeinfo .decks{font-size:12px;color:var(--muted);margin-top:2px}
+</style>
 </head>
 <body>
 <div class="wrap">
   <header class="appbar"></header>
   <h2 class="title">Blackjack</h2>
-  <p class="lead">Beat the dealer without busting. Blackjack pays 3:2. Dealer stands on all 17s.</p>
+  <p class="lead">Eight-deck shoe, dealt straight off the top — crypto-shuffled, never reset mid-shoe, so counting is fair game. Blackjack pays 3:2, dealer stands on all 17s.</p>
 
   <div class="felt">
+    <div class="shoerow">
+      <div class="shoe"><div class="fill" id="shoeFill" style="height:100%"></div></div>
+      <div class="shoeinfo">
+        <div class="n" id="shoeCards">416</div>
+        <div class="sub">cards in shoe</div>
+        <div class="decks" id="shoeDecks">8.0 decks left</div>
+      </div>
+    </div>
     <div class="tally">DEALER <b id="dealerVal">—</b></div>
     <div class="hand" id="dealerHand"></div>
     <div class="banner" id="banner"></div>
@@ -51,7 +71,7 @@
     <button class="btn primary" id="topUpBtn">Top up (+1,000)</button>
   </div>
 
-  <footer>Play chips only. The Parlour.</footer>
+  <footer>Play chips only · 8-deck shoe · provably shuffled with crypto.getRandomValues</footer>
 </div>
 
 <script type="module">
@@ -59,15 +79,33 @@ import { ensurePlayer, renderHeader, watchWallet, changeChips, topUp } from './c
 await ensurePlayer();
 renderHeader('blackjack.html');
 
+const DECKS=8, SHOE_SIZE=DECKS*52, RESHUFFLE_AT=78; // reshuffle with ~1.5 decks left
 let chips=0;
 watchWallet(w=>{ chips=w.chips??0; document.getElementById('brokeUI').classList.toggle('hidden', chips>0 || inHand); });
 
 const SUITS=[['\u2660','b'],['\u2665','r'],['\u2666','r'],['\u2663','b']];
 const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-let deck=[], player=[], dealer=[], bet=0, inHand=false, doubled=false;
+let shoe=[], player=[], dealer=[], bet=0, inHand=false;
 
-function buildDeck(){ deck=[]; for(const [s,c] of SUITS) for(const r of RANKS) deck.push({r,s,c}); for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; } }
-function draw(){ if(deck.length<10) buildDeck(); return deck.pop(); }
+// fair Fisher–Yates using cryptographic randomness
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const r=new Uint32Array(1); crypto.getRandomValues(r);
+    const j=r[0]%(i+1); [a[i],a[j]]=[a[j],a[i]];
+  }
+}
+function newShoe(){
+  shoe=[];
+  for(let d=0;d<DECKS;d++) for(const [s,c] of SUITS) for(const r of RANKS) shoe.push({r,s,c});
+  shuffle(shoe); updateShoe();
+}
+function draw(){ if(shoe.length===0) newShoe(); const c=shoe.pop(); updateShoe(); return c; }
+function updateShoe(){
+  const left=shoe.length;
+  document.getElementById('shoeCards').textContent=left;
+  document.getElementById('shoeDecks').textContent=(left/52).toFixed(1)+' decks left';
+  document.getElementById('shoeFill').style.height=(left/SHOE_SIZE*100)+'%';
+}
 function val(cards){ let t=0,a=0; for(const c of cards){ if(c.r==='A'){a++;t+=11;} else if(['K','Q','J'].includes(c.r)) t+=10; else t+=Number(c.r); } while(t>21&&a>0){t-=10;a--;} return t; }
 function isBlackjack(cards){ return cards.length===2 && val(cards)===21; }
 
@@ -83,16 +121,18 @@ function render(hideHole){
   document.getElementById('dealerVal').textContent = dealer.length ? (hideHole ? val([dealer[0]]) : val(dealer)) : '—';
 }
 
-/* betting */
 function setBet(v){ bet=Math.max(0,Math.min(v, chips)); document.getElementById('betAmt').textContent=bet.toLocaleString(); }
 document.querySelectorAll('.chipbtn').forEach(b=> b.onclick=()=> setBet(bet+Number(b.dataset.v)) );
 document.getElementById('clearBet').onclick=()=>setBet(0);
 
 document.getElementById('dealBtn').onclick=async ()=>{
   if(bet<=0 || bet>chips) return;
+  const banner=document.getElementById('banner');
+  if(shoe.length < RESHUFFLE_AT){ newShoe(); banner.textContent='Cut card reached — new 8-deck shoe shuffled'; banner.className='banner push'; }
+  else { banner.textContent=''; banner.className='banner'; }
   await changeChips(-bet);
-  inHand=true; doubled=false;
-  buildDeck(); player=[draw(),draw()]; dealer=[draw(),draw()];
+  inHand=true;
+  player=[draw(),draw()]; dealer=[draw(),draw()];
   show('action'); render(true);
   if(isBlackjack(player) || isBlackjack(dealer)) return finish();
   document.getElementById('doubleBtn').disabled = (chips < bet);
@@ -104,12 +144,11 @@ document.getElementById('hitBtn').onclick=()=>{
 };
 document.getElementById('standBtn').onclick=()=>finish();
 document.getElementById('doubleBtn').onclick=async ()=>{
-  if(chips<bet) return; await changeChips(-bet); bet*=2; doubled=true;
+  if(chips<bet) return; await changeChips(-bet); bet*=2;
   player.push(draw()); render(true); finish();
 };
 
 async function finish(){
-  // dealer plays if player not busted
   if(val(player)<=21){ while(val(dealer)<17) dealer.push(draw()); }
   render(false);
   const pv=val(player), dv=val(dealer);
@@ -136,7 +175,7 @@ function show(which){
 document.getElementById('nextBtn').onclick=()=>{ player=[];dealer=[]; document.getElementById('banner').textContent=''; document.getElementById('banner').className='banner'; setBet(0); render(false); show('bet'); };
 document.getElementById('topUpBtn').onclick=async ()=>{ await topUp(); };
 
-setBet(0); show('bet'); render(false);
+newShoe(); setBet(0); show('bet'); render(false);
 </script>
 </body>
 </html>
