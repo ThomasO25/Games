@@ -56,15 +56,15 @@ export async function topUp(){ // free refill if broke
 
 // ---- shared header ----
 export function renderHeader(active){
-  const games = [
-    ['index.html','Hub'], ['chess.html','Chess'], ['blackjack.html','Blackjack'],
-    ['roulette.html','Roulette'], ['poker.html','Poker'], ['pool.html','Pool'], ['canasta.html','Canasta']
-  ];
   const bar = document.querySelector('.appbar');
   if(!bar) return;
+  const isHub = active==='index.html';
+  const back = isHub ? '' :
+    `<button id="backBtn" title="Back to the Parlour" style="background:var(--panel);border:1px solid var(--line);color:var(--text);width:40px;height:40px;border-radius:11px;font-size:24px;line-height:36px;cursor:pointer;padding:0">&#8249;</button>`;
   bar.innerHTML = `
-    <div class="brand" onclick="location.href='index.html'">
-      <span class="glyph">&#9824;</span><b>The Parlour</b>
+    <div style="display:flex;align-items:center;gap:10px">
+      ${back}
+      <div class="brand" id="brandBtn"><span class="glyph">&#9824;</span><b>The Parlour</b></div>
     </div>
     <div class="right">
       <div class="wallet">
@@ -73,6 +73,9 @@ export function renderHeader(active){
         <span class="who" id="whoBtn" title="Change name">${playerName()||'set name'}</span>
       </div>
     </div>`;
+  const goHome = ()=>location.href='index.html';
+  document.getElementById('brandBtn').onclick = goHome;
+  const bb = document.getElementById('backBtn'); if(bb) bb.onclick = goHome;
   document.getElementById('whoBtn').onclick = ()=>{
     const n = prompt("Change your name:", playerName());
     if(n){ setPlayerName(n); ensurePlayer(); document.getElementById('whoBtn').textContent = playerName(); }

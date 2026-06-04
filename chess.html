@@ -29,6 +29,7 @@
       <button class="btn primary" id="joinBtn" style="width:100%;margin-top:10px">Join</button>
     </div>
     <div class="note" id="lobbyNote">Create a room, then send the 4-letter code to your opponent.</div>
+    <button class="btn ghost hidden" id="leaveBtn" style="width:100%;margin-top:10px">Leave this room</button>
   </div>
 
   <div class="status">
@@ -195,7 +196,12 @@ document.querySelectorAll('#modes .pill').forEach(p=>{
     mode=p.dataset.mode;
     document.getElementById('lobby').classList.toggle('hidden', mode!=='online');
     if(online && online.unsub){ online.unsub(); online=null; }
-    if(mode==='online'){ flip=false; newGame(); document.getElementById('statusMsg').textContent='Create or join a room.'; }
+    if(mode==='online'){
+      flip=false; newGame();
+      const saved=getSavedRoom();
+      if(saved && saved.code){ startOnline(saved.code, saved.color); document.getElementById('lobbyNote').innerHTML='Back in room <b style="color:var(--brass-lite)">'+saved.code+'</b> ('+(saved.color==='w'?'White':'Black')+').'; }
+      else { document.getElementById('leaveBtn').classList.add('hidden'); document.getElementById('statusMsg').textContent='Create or join a room.'; }
+    }
     else newGame();
   };
 });
@@ -233,12 +239,15 @@ document.getElementById('joinBtn').onclick=async ()=>{
   startOnline(code,color);
   document.getElementById('lobbyNote').innerHTML='Joined room <b style="color:var(--brass-lite)">'+code+'</b>. You play '+(color==='w'?'White':'Black')+'.';
 };
+function getSavedRoom(){ try{ return JSON.parse(localStorage.getItem('chess_room')||'null'); }catch(e){ return null; } }
 function startOnline(code,color){
   if(online && online.unsub) online.unsub();
   flip = (color==='b');
+  localStorage.setItem('chess_room', JSON.stringify({code,color}));
+  document.getElementById('leaveBtn').classList.remove('hidden');
   online={ code, color, white:null, black:null, moves:[], unsub:null };
   online.unsub = onSnapshot(doc(db,'matches',code), snap=>{
-    if(!snap.exists()) return;
+    if(!snap.exists()){ document.getElementById('lobbyNote').textContent='This room is no longer available.'; localStorage.removeItem('chess_room'); return; }
     const d=snap.data();
     online.white=d.white; online.black=d.black; online.moves=d.moves||[];
     rebuildFromMoves(online.moves);
@@ -246,7 +255,27 @@ function startOnline(code,color){
   });
 }
 
-newGame();
+/* ---- leave room ---- */
+document.getElementById('leaveBtn').onclick=()=>{
+  if(online && online.unsub) online.unsub();
+  online=null; localStorage.removeItem('chess_room');
+  document.getElementById('leaveBtn').classList.add('hidden');
+  document.getElementById('lobbyNote').textContent='You left the room. Create or join another.';
+  newGame();
+};
+
+/* ---- boot: rejoin a live game if one is saved ---- */
+const savedRoom=getSavedRoom();
+if(savedRoom && savedRoom.code){
+  mode='online';
+  document.querySelectorAll('#modes .pill').forEach(x=>x.classList.toggle('on', x.dataset.mode==='online'));
+  document.getElementById('lobby').classList.remove('hidden');
+  newGame();
+  startOnline(savedRoom.code, savedRoom.color);
+  document.getElementById('lobbyNote').innerHTML='Back in room <b style="color:var(--brass-lite)">'+savedRoom.code+'</b> ('+(savedRoom.color==='w'?'White':'Black')+'). Pick up where you left off.';
+} else {
+  newGame();
+}
 </script>
 </body>
 </html>
