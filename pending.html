@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Awaiting approval · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<div class="wrap">
+  <div class="workshop" style="margin-top:10vh">
+    <div class="big">&#9851;</div>
+    <h2 class="title">You're on the list</h2>
+    <p class="lead" style="max-width:380px;margin:8px auto 22px">Your account is waiting for the host to let you in. This page will open automatically the moment you're approved.</p>
+    <button class="btn ghost" id="out">Sign out</button>
+  </div>
+  <footer>The Parlour</footer>
+</div>
+<script type="module">
+import { auth, onAuthStateChanged, signOut } from './firebase.js';
+import { db, doc, onSnapshot } from './firebase.js';
+onAuthStateChanged(auth, user=>{
+  if(!user){ location.href='login.html'; return; }
+  onSnapshot(doc(db,'players',user.uid), s=>{
+    const d=s.data();
+    if(d && (d.approved || d.role==='admin')) location.href='index.html';
+  });
+});
+document.getElementById('out').onclick=()=>signOut(auth).then(()=>location.href='login.html');
+</script>
+</body>
+</html>

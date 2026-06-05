@@ -75,8 +75,8 @@
 </div>
 
 <script type="module">
-import { ensurePlayer, renderHeader, watchWallet, changeChips, topUp } from './common.js';
-await ensurePlayer();
+import { requireApproved, renderHeader, watchWallet, changeChips, topUp } from './common.js';
+await requireApproved();
 renderHeader('blackjack.html');
 
 const DECKS=8, SHOE_SIZE=DECKS*52, RESHUFFLE_AT=78; // reshuffle with ~1.5 decks left
@@ -130,7 +130,7 @@ document.getElementById('dealBtn').onclick=async ()=>{
   const banner=document.getElementById('banner');
   if(shoe.length < RESHUFFLE_AT){ newShoe(); banner.textContent='Cut card reached — new 8-deck shoe shuffled'; banner.className='banner push'; }
   else { banner.textContent=''; banner.className='banner'; }
-  await changeChips(-bet);
+  await changeChips(-bet,'Blackjack bet');
   inHand=true;
   player=[draw(),draw()]; dealer=[draw(),draw()];
   show('action'); render(true);
@@ -144,7 +144,7 @@ document.getElementById('hitBtn').onclick=()=>{
 };
 document.getElementById('standBtn').onclick=()=>finish();
 document.getElementById('doubleBtn').onclick=async ()=>{
-  if(chips<bet) return; await changeChips(-bet); bet*=2;
+  if(chips<bet) return; await changeChips(-bet,'Blackjack double'); bet*=2;
   player.push(draw()); render(true); finish();
 };
 
@@ -162,7 +162,7 @@ async function finish(){
   else if(pv<dv){ msg='Dealer wins'; cls='lose'; give=0; }
   else { msg='Push'; cls='push'; give=bet; }
   banner.textContent=msg; banner.className='banner '+cls;
-  if(give>0) await changeChips(give);
+  if(give>0) await changeChips(give,'Blackjack win');
   inHand=false; show('next');
 }
 

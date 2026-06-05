@@ -80,8 +80,8 @@
 </div>
 
 <script type="module">
-import { ensurePlayer, renderHeader, watchWallet, changeChips, topUp } from './common.js';
-await ensurePlayer();
+import { requireApproved, renderHeader, watchWallet, changeChips, topUp } from './common.js';
+await requireApproved();
 renderHeader('roulette.html');
 
 const RED=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
@@ -132,7 +132,7 @@ function flash(t){ const b=document.getElementById('banner'); b.textContent=t; b
 
 document.getElementById('spinBtn').onclick=async ()=>{
   if(spinning) return; const stake=total(); if(stake<=0){ flash('Place a bet first'); return; }
-  spinning=true; await changeChips(-stake);
+  spinning=true; await changeChips(-stake,'Roulette bets');
   const result=Math.floor(Math.random()*37);
   const wheel=document.getElementById('wheel'); const banner=document.getElementById('banner');
   banner.textContent='Spinning…'; banner.className='banner';
@@ -147,7 +147,7 @@ document.getElementById('spinBtn').onclick=async ()=>{
     const net=give-stake;
     banner.textContent = give>0 ? `${n} — you win ${give.toLocaleString()}! (${net>=0?'+':''}${net.toLocaleString()})` : `${n} — no luck this time`;
     banner.className='banner '+(net>0?'win':(net<0?'lose':'push'));
-    if(give>0) changeChips(give);
+    if(give>0) changeChips(give,'Roulette win');
     bets={}; refresh(); spinning=false;
   }
 };

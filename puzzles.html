@@ -45,10 +45,9 @@
 </div>
 
 <script type="module">
-import { requireAuth, ensureAccount, renderHeader, recordPuzzle, watchWallet } from './common.js';
+import { requireApproved, renderHeader, recordPuzzle, watchWallet } from './common.js';
 import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
-const user = await requireAuth();
-await ensureAccount(user);
+await requireApproved();
 renderHeader('puzzles.html');
 
 const GLYPH={p:'\u265F',n:'\u265E',b:'\u265D',r:'\u265C',q:'\u265B',k:'\u265A'};

@@ -33,9 +33,8 @@
 </div>
 
 <script type="module">
-import { requireAuth, ensureAccount, renderHeader, watchWallet, listLedger } from './common.js';
-const user = await requireAuth();
-await ensureAccount(user);
+import { requireApproved, renderHeader, watchWallet, listLedger } from './common.js';
+await requireApproved();
 renderHeader('history.html');
 
 watchWallet(w=>{ document.getElementById('bal').textContent=(w.chips??0).toLocaleString(); });

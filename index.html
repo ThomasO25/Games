@@ -54,14 +54,21 @@
     </a>
   </div>
 
+  <div class="cards" id="adminCards" style="display:none;margin-top:13px">
+    <a class="card live" href="admin.html">
+      <span class="badge">Host</span><span class="ico">&#9876;</span>
+      <h3>Host Controls</h3><p>Approve members and manage the room.</p>
+    </a>
+  </div>
+
   <footer>The Parlour &middot; play chips only, just for fun &middot; built for family &amp; friends</footer>
 </div>
 
 <script type="module">
-  import { requireAuth, ensureAccount, renderHeader } from './common.js';
-  const user = await requireAuth();
-  await ensureAccount(user);
+  import { requireApproved, renderHeader, isAdmin } from './common.js';
+  await requireApproved();
   renderHeader('index.html');
+  if(isAdmin()) document.getElementById('adminCards').style.display='grid';
 </script>
 </body>
 </html>

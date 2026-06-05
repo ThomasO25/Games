@@ -19,8 +19,8 @@
   <footer>The Parlour</footer>
 </div>
 <script type="module">
-  import { ensurePlayer, renderHeader } from './common.js';
-  await ensurePlayer();
+  import { requireApproved, renderHeader } from './common.js';
+  await requireApproved();
   renderHeader('pool.html');
 </script>
 </body>
