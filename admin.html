@@ -6,68 +6,94 @@
 <title>Admin · The Parlour</title>
 <link rel="stylesheet" href="styles.css"/>
 <style>
-  .prow{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
-    border-radius:12px;padding:12px 14px;margin-bottom:9px}
+  .prow{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:9px}
   .prow .pinfo{flex:1;min-width:0}
-  .prow .pname{font-size:14.5px;font-weight:500;display:flex;align-items:center;gap:7px}
+  .prow .pname{font-size:14.5px;font-weight:500;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
   .prow .tag{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;padding:2px 7px;border-radius:20px}
   .tag.admin{background:var(--brass);color:var(--bg)} .tag.pending{background:var(--red);color:#fff} .tag.ok{background:var(--green);color:#10130f}
-  .prow .pmeta{font-size:11.5px;color:var(--faint);margin-top:2px}
-  .prow .pact{display:flex;gap:6px}
+  .prow .pmeta{font-size:11.5px;color:var(--faint);margin-top:2px;word-break:break-all}
+  .prow .pact{display:flex;gap:6px;flex-wrap:wrap}
   .prow .mini{font-size:12px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--text);cursor:pointer}
   .prow .mini.good{border-color:var(--green);color:var(--green)} .prow .mini.bad{border-color:var(--red);color:var(--red)}
   .seg{font-family:'Cormorant Garamond';font-size:15px;letter-spacing:2px;text-transform:uppercase;color:var(--brass);margin:22px 0 10px}
+  .diag{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:16px;font-size:13px;line-height:1.7}
+  .diag b{color:var(--brass-lite)} .diag .uid{font-family:monospace;font-size:12px;color:var(--muted);word-break:break-all}
+  .diag.bad{border-color:var(--red)}
+  .errbox{background:rgba(150,40,30,.16);border:1px solid var(--red);border-radius:12px;padding:13px 15px;margin-bottom:16px;font-size:13px;line-height:1.6;display:none}
+  .errbox.show{display:block} .errbox code{font-family:monospace;font-size:12px;color:#f0c0b0}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="appbar"></header>
   <h2 class="title">Host Controls</h2>
-  <p class="lead">Approve who gets into the Parlour, and hand out host privileges. Only hosts can see this page.</p>
+  <p class="lead">Approve who gets into the Parlour and hand out host privileges.</p>
+  <div class="diag" id="diag">Checking your host status…</div>
+  <div class="errbox" id="errbox"></div>
+  <div id="gateMsg"></div>
   <div id="pending"></div>
-  <div class="seg">Members</div>
+  <div class="seg" id="memSeg" style="display:none">Members</div>
   <div id="members"></div>
   <footer>The Parlour · host panel</footer>
 </div>
 <script type="module">
-import { requireApproved, renderHeader, isAdmin, listAllPlayers, setApproved, setRole, uid } from './common.js';
+import { requireApproved, renderHeader, isAdmin, listAllPlayers, setApproved, setRole, uid, getAccount, userName } from './common.js';
 await requireApproved();
 renderHeader('admin.html');
-if(!isAdmin()){ document.querySelector('.wrap').innerHTML='<header class="appbar"></header><div class="workshop"><div class="big">&#128274;</div><h2 class="title">Hosts only</h2><p class="lead">This page is for hosts.</p><a class="btn primary" href="index.html">Back to the Parlour</a></div>'; renderHeader('admin.html'); throw new Error('not admin');}
+
+const acct=getAccount()||{};
+const myUid=uid();
+const diag=document.getElementById('diag');
+const errbox=document.getElementById('errbox');
+function showErr(html){ errbox.innerHTML=html; errbox.classList.add('show'); }
+function hideErr(){ errbox.classList.remove('show'); }
+
+const amHost=isAdmin();
+diag.innerHTML = `Signed in as <b>${userName()}</b> · role: <b>${acct.role||'player'}</b> · approved: <b>${acct.approved?'yes':'no'}</b><br><span class="uid">your uid: ${myUid}</span>`;
+if(!amHost){
+  diag.classList.add('bad');
+  document.getElementById('gateMsg').innerHTML =
+    '<div class="errbox show">You are <b>not a host yet</b>, so you can\u2019t approve people. To make yourself a host, open Firebase Console → Firestore → <code>players</code> → your document (uid above) → set field <code>role</code> to <code>admin</code> and <code>approved</code> to <code>true</code>, then reload this page.</div>';
+  throw new Error('not host');
+}
 
 async function render(){
-  const players = await listAllPlayers();
+  hideErr();
+  let players;
+  try{ players = await listAllPlayers(); }
+  catch(e){
+    showErr('<b>Couldn\u2019t load the member list.</b><br>Your Firestore security rules don\u2019t let hosts read the players list yet. Publish the rules from the chat (Firestore → Rules → Publish), then reload.<br><code>'+(e.code||e.message)+'</code>');
+    return;
+  }
   const pend = players.filter(p=>!p.approved && p.role!=='admin');
   const mem  = players.filter(p=>p.approved || p.role==='admin');
   const pBox=document.getElementById('pending');
-  if(!pend.length) pBox.innerHTML='<div class="seg">Waiting room</div><div class="empty" style="padding:4px 2px">No one waiting.</div>';
-  else pBox.innerHTML='<div class="seg">Waiting room</div>'+pend.map(p=>rowHTML(p,true)).join('');
+  pBox.innerHTML = '<div class="seg">Waiting room</div>' + (pend.length? pend.map(p=>rowHTML(p,true)).join('') : '<div class="empty" style="padding:4px 2px">No one waiting. New sign-ups appear here for you to approve.</div>');
+  document.getElementById('memSeg').style.display='';
   document.getElementById('members').innerHTML = mem.map(p=>rowHTML(p,false)).join('') || '<div class="empty">No members yet.</div>';
   wire();
 }
 function rowHTML(p, waiting){
-  const me = p.uid===uid();
-  const tag = p.role==='admin' ? '<span class="tag admin">Host</span>' : (p.approved?'<span class="tag ok">Member</span>':'<span class="tag pending">Pending</span>');
+  const me=p.uid===myUid;
+  const tag = p.role==='admin'?'<span class="tag admin">Host</span>':(p.approved?'<span class="tag ok">Member</span>':'<span class="tag pending">Pending</span>');
   let acts='';
   if(waiting) acts=`<button class="mini good" data-approve="${p.uid}">Approve</button>`;
-  else if(!me){
-    acts = (p.approved?`<button class="mini bad" data-revoke="${p.uid}">Revoke</button>`:'') +
-           (p.role==='admin'?`<button class="mini" data-demote="${p.uid}">Remove host</button>`:`<button class="mini" data-promote="${p.uid}">Make host</button>`);
-  } else acts='<span class="pmeta">that\u2019s you</span>';
-  return `<div class="prow"><div class="pinfo"><div class="pname">${p.name||'—'} ${tag}</div>
+  else if(!me) acts=(p.approved?`<button class="mini bad" data-revoke="${p.uid}">Revoke</button>`:'')+(p.role==='admin'?`<button class="mini" data-demote="${p.uid}">Remove host</button>`:`<button class="mini" data-promote="${p.uid}">Make host</button>`);
+  else acts='<span class="pmeta">that\u2019s you</span>';
+  return `<div class="prow"><div class="pinfo"><div class="pname">${p.name||'\u2014'} ${tag}</div>
     <div class="pmeta">${p.email||''} · blitz ${p.ratingBlitz||p.rating||800} · ${(p.chips||0).toLocaleString()} chips</div></div>
     <div class="pact">${acts}</div></div>`;
 }
-const RULES_HINT='Couldn\u2019t update this member. This means your Firestore security rules don\u2019t let hosts edit other members yet. Publish the host rules once (they\u2019re in the chat), then this works from the site every time.';
+function explain(res){
+  const denied = (res.code||'').includes('permission-denied') || /permission/i.test(res.message||'');
+  if(denied) showErr('<b>Permission denied by Firestore.</b><br>Your security rules don\u2019t allow hosts to edit other members yet. In Firebase Console → Firestore → Rules, publish the host rules from the chat, then try again.<br><code>'+(res.code||res.message)+'</code>');
+  else showErr('<b>Update failed.</b><br><code>'+(res.code||res.message||'unknown error')+'</code>');
+}
 function wire(){
-  document.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{
-    b.disabled=true; b.textContent='\u2026';
-    const ok=await setApproved(b.dataset.approve,true);
-    if(ok) render(); else { b.disabled=false; b.textContent='Approve'; alert(RULES_HINT); }
-  });
-  document.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=async()=>{ if(!confirm('Revoke access?'))return; b.disabled=true; const ok=await setApproved(b.dataset.revoke,false); if(ok) render(); else { b.disabled=false; alert(RULES_HINT); } });
-  document.querySelectorAll('[data-promote]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const ok=await setRole(b.dataset.promote,'admin'); if(ok){ await setApproved(b.dataset.promote,true); render(); } else { b.disabled=false; alert(RULES_HINT); } });
-  document.querySelectorAll('[data-demote]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const ok=await setRole(b.dataset.demote,'player'); if(ok) render(); else { b.disabled=false; alert(RULES_HINT); } });
+  document.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{ b.disabled=true;b.textContent='\u2026'; const r=await setApproved(b.dataset.approve,true); if(r.ok) render(); else { b.disabled=false;b.textContent='Approve'; explain(r);} });
+  document.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=async()=>{ if(!confirm('Revoke access?'))return; b.disabled=true; const r=await setApproved(b.dataset.revoke,false); if(r.ok) render(); else { b.disabled=false; explain(r);} });
+  document.querySelectorAll('[data-promote]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const r=await setRole(b.dataset.promote,'admin'); if(r.ok){ await setApproved(b.dataset.promote,true); render(); } else { b.disabled=false; explain(r);} });
+  document.querySelectorAll('[data-demote]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const r=await setRole(b.dataset.demote,'player'); if(r.ok) render(); else { b.disabled=false; explain(r);} });
 }
 render();
 </script>

@@ -129,11 +129,11 @@ export async function recordPuzzle(success){
 
 /* ---------- admin ---------- */
 export async function listAllPlayers(){
-  try{ return (await getDocs(collection(db,'players'))).docs.map(d=>({uid:d.id, ...d.data()})); }
-  catch(e){ return []; }
+  const snap = await getDocs(collection(db,'players'));
+  return snap.docs.map(d=>({uid:d.id, ...d.data()}));
 }
-export async function setApproved(targetUid, val){ try{ await updateDoc(doc(db,'players',targetUid),{approved:val}); return true; }catch(e){ console.warn(e.message); return false; } }
-export async function setRole(targetUid, role){ try{ await updateDoc(doc(db,'players',targetUid),{role}); return true; }catch(e){ console.warn(e.message); return false; } }
+export async function setApproved(targetUid, val){ try{ await updateDoc(doc(db,'players',targetUid),{approved:val}); return {ok:true}; }catch(e){ return {ok:false, code:e.code||'', message:e.message||String(e)}; } }
+export async function setRole(targetUid, role){ try{ await updateDoc(doc(db,'players',targetUid),{role}); return {ok:true}; }catch(e){ return {ok:false, code:e.code||'', message:e.message||String(e)}; } }
 
 /* ---------- shared header ---------- */
 export function renderHeader(active){

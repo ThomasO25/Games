@@ -13,7 +13,7 @@
   .wheelface.black{background:radial-gradient(circle at 40% 35%,#39352a,#15130d)}
   .wheelface.green{background:radial-gradient(circle at 40% 35%,#3f9a5a,#1a5a30)}
   .boardwrap{overflow-x:auto;margin:12px 0;-webkit-overflow-scrolling:touch;border-radius:12px}
-  .boardwrap svg{display:block}
+  .boardwrap svg{display:block;width:100%;min-width:540px;height:auto}
   .chipsel{display:flex;gap:8px;justify-content:center;margin:6px 0 10px}
   .chipsel .chipbtn.sel{outline:3px solid var(--brass-lite);outline-offset:2px}
   .rouhint{font-size:12px;color:var(--faint);text-align:center;line-height:1.5;margin-bottom:8px}
@@ -23,7 +23,7 @@
 <div class="wrap">
   <header class="appbar"></header>
   <h2 class="title">Roulette</h2>
-  <p class="lead">European single-zero wheel. $5 table minimum. Drop $1 chips on numbers, splits, corners, and lines (at least $5 across them), or $5+ on the outside bets.</p>
+  <p class="lead">American double-zero wheel (0 and 00). $5 table minimum. Drop $1 chips on numbers, splits, corners and lines (at least $5 across them), or $5+ on the outside bets. Use Undo, Rebet and Double below.</p>
 
   <div class="felt" style="padding:16px 12px">
     <div class="wheelface green" id="wheel">–</div>
@@ -41,8 +41,11 @@
 
   <div class="boardwrap" id="boardwrap"></div>
 
-  <div class="row">
-    <button class="btn ghost" id="clearBtn">Clear bets</button>
+  <div class="row" style="flex-wrap:wrap">
+    <button class="btn ghost" id="undoBtn">&#8624; Undo</button>
+    <button class="btn ghost" id="rebetBtn">Rebet</button>
+    <button class="btn ghost" id="doubleBtn">Double</button>
+    <button class="btn ghost" id="clearBtn">Clear</button>
     <button class="btn primary" id="spinBtn">Spin</button>
   </div>
   <div class="panel hidden" id="brokeUI" style="margin-top:14px;text-align:center">
@@ -58,8 +61,8 @@ await requireApproved();
 renderHeader('roulette.html');
 
 const RED=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-const colorOf=n=>n===0?'green':(RED.has(n)?'red':'black');
-let chips=0, active=5, bets={}, spinning=false;
+const colorOf=n=>(n===0||n==='00')?'green':(RED.has(n)?'red':'black');
+let chips=0, active=5, bets={}, spinning=false, placeStack=[], lastBets={};
 const TABLE_MIN=5, INSIDE_MIN=5;
 const CHIPCOL={1:'#6b6b6b',5:'#b33',25:'#2a7d4f',100:'#2b3a6b'};
 watchWallet(w=>{ chips=w.chips??0; document.getElementById('brokeUI').classList.toggle('hidden', chips>0); });
@@ -69,7 +72,8 @@ const W=40,H=40;
 const num=(c,r)=>c*3+(3-r);
 function genBets(){
   const B=[]; const add=(id,cover,pay,cx,cy,hot)=>B.push({id,cover,pay,cx,cy,hot});
-  add('s0',[0],35, W/2,1.5*H,{t:'rect',x:0,y:0,w:W,h:3*H});
+  add('s0',[0],35, W/2,0.75*H,{t:'rect',x:0,y:0,w:W,h:1.5*H});
+  add('s00',['00'],35, W/2,2.25*H,{t:'rect',x:0,y:1.5*H,w:W,h:1.5*H});
   for(let c=0;c<12;c++)for(let r=0;r<3;r++){const n=num(c,r);add('s'+n,[n],35,W+c*W+W/2,r*H+H/2,{t:'rect',x:W+c*W,y:r*H,w:W,h:H});}
   for(let r=0;r<3;r++)for(let c=0;c<11;c++){const a=num(c,r),b=num(c+1,r);add('h'+a+'_'+b,[a,b],17,W+(c+1)*W,r*H+H/2,{t:'rect',x:W+(c+1)*W-6,y:r*H+9,w:12,h:H-18});}
   for(let c=0;c<12;c++)for(let r=0;r<2;r++){const a=num(c,r),b=num(c,r+1);add('v'+a+'_'+b,[a,b],17,W+c*W+W/2,(r+1)*H,{t:'rect',x:W+c*W+9,y:(r+1)*H-6,w:W-18,h:12});}
@@ -92,7 +96,7 @@ function E(tag,a){ const e=document.createElementNS(SVGNS,tag); for(const k in a
 function place(id){ if(spinning)return; const b=byId[id]; const inside=b.pay>=5;
   if(active===1 && !inside){ flash('$1 chips go on numbers/splits/lines only'); return; }
   if(total()+active>chips){ flash('Not enough chips'); return; }
-  bets[id]=(bets[id]||0)+active; drawChips(); }
+  bets[id]=(bets[id]||0)+active; placeStack.push({id,amt:active}); drawChips(); }
 function buildBoard(){
   const svg=E('svg',{viewBox:'0 0 560 218',width:'560',role:'img'});
   const felt=E('rect',{x:-4,y:-4,width:568,height:226,rx:8,fill:'#1e5a36'}); svg.appendChild(felt);
@@ -102,7 +106,8 @@ function buildBoard(){
   // cells: straights + outside (clickable)
   for(const b of BETS){
     const h=b.hot;
-    if(b.id==='s0'){ const r=E('rect',{x:0,y:0,width:W,height:3*H,fill:'#1a5a30',stroke:'#caa54a','stroke-width':1.2,rx:2}); r.style.cursor='pointer'; r.addEventListener('pointerdown',()=>place('s0')); G.appendChild(r); G.appendChild(txt(W/2,1.5*H,'0',16)); }
+    if(b.id==='s0'){ const r=E('rect',{x:0,y:0,width:W,height:1.5*H,fill:'#1a5a30',stroke:'#caa54a','stroke-width':1.2,rx:2}); r.style.cursor='pointer'; r.addEventListener('pointerdown',()=>place('s0')); G.appendChild(r); G.appendChild(txt(W/2,0.75*H,'0',15)); }
+    else if(b.id==='s00'){ const r=E('rect',{x:0,y:1.5*H,width:W,height:1.5*H,fill:'#1a5a30',stroke:'#caa54a','stroke-width':1.2,rx:2}); r.style.cursor='pointer'; r.addEventListener('pointerdown',()=>place('s00')); G.appendChild(r); G.appendChild(txt(W/2,2.25*H,'00',14)); }
     else if(/^s\d+$/.test(b.id)){ const n=+b.id.slice(1); const fill=colorOf(n)==='red'?'#9a2f17':'#1c1a14'; const r=E('rect',{x:h.x,y:h.y,width:W,height:H,fill,stroke:'#caa54a','stroke-width':1,rx:2}); r.style.cursor='pointer'; r.addEventListener('pointerdown',()=>place(b.id)); G.appendChild(r); G.appendChild(txt(b.cx,b.cy,String(n),14)); }
     else if(/^col\d$/.test(b.id)){ const r=E('rect',{x:h.x,y:h.y,width:W,height:H,fill:'#163f26',stroke:'#caa54a','stroke-width':1,rx:2}); r.style.cursor='pointer'; r.addEventListener('pointerdown',()=>place(b.id)); G.appendChild(r); G.appendChild(txt(b.cx,b.cy,'2:1',12)); }
     else if(/^doz\d$/.test(b.id)){ const r=E('rect',{x:h.x,y:h.y,width:h.w,height:h.h,fill:'#163f26',stroke:'#caa54a','stroke-width':1,rx:2}); r.style.cursor='pointer'; r.addEventListener('pointerdown',()=>place(b.id)); G.appendChild(r); G.appendChild(txt(b.cx,b.cy,['1st 12','2nd 12','3rd 12'][+b.id.slice(3)],12)); }
@@ -129,17 +134,21 @@ function drawChips(){
 function flash(t){ const b=document.getElementById('banner'); b.textContent=t; b.className='banner push'; }
 
 document.querySelectorAll('#chipSel .chipbtn').forEach(b=>b.onclick=()=>{ active=Number(b.dataset.v); document.querySelectorAll('#chipSel .chipbtn').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); });
-document.getElementById('clearBtn').onclick=()=>{ if(spinning)return; bets={}; drawChips(); };
+document.getElementById('clearBtn').onclick=()=>{ if(spinning)return; bets={}; placeStack=[]; drawChips(); };
+document.getElementById('undoBtn').onclick=()=>{ if(spinning)return; const last=placeStack.pop(); if(!last){ flash('Nothing to undo'); return; } bets[last.id]-=last.amt; if(bets[last.id]<=0) delete bets[last.id]; drawChips(); };
+document.getElementById('rebetBtn').onclick=()=>{ if(spinning)return; const keys=Object.keys(lastBets); if(!keys.length){ flash('No previous bet to repeat'); return; } const t=keys.reduce((a,k)=>a+lastBets[k],0); if(t>chips){ flash('Not enough chips to rebet'); return; } bets=Object.assign({},lastBets); placeStack=[]; drawChips(); };
+document.getElementById('doubleBtn').onclick=()=>{ if(spinning)return; const t=total(); if(t===0){ flash('Place a bet first'); return; } if(t*2>chips){ flash('Not enough chips to double'); return; } for(const id in bets) bets[id]*=2; placeStack=[]; drawChips(); };
 
 document.getElementById('spinBtn').onclick=async ()=>{
   if(spinning)return; const stake=total();
   if(stake<TABLE_MIN){ flash('Table minimum is $'+TABLE_MIN); return; }
   const ins=insideTotal(); if(ins>0 && ins<INSIDE_MIN){ flash('Put at least $'+INSIDE_MIN+' across the inside bets'); return; }
+  lastBets=Object.assign({},bets);
   spinning=true; await changeChips(-stake,'Roulette bets');
-  const result=Math.floor(Math.random()*37);
+  const ridx=Math.floor(Math.random()*38); const result = ridx===0?0:(ridx===1?'00':ridx-1);
   const wheel=document.getElementById('wheel'), banner=document.getElementById('banner');
   banner.textContent='Spinning…'; banner.className='banner';
-  let ticks=0; const iv=setInterval(()=>{ const f=Math.floor(Math.random()*37); wheel.textContent=f; wheel.className='wheelface '+colorOf(f); if(++ticks>18){ clearInterval(iv); settle(result); } },70);
+  let ticks=0; const iv=setInterval(()=>{ const fi=Math.floor(Math.random()*38); const f=fi===0?0:(fi===1?'00':fi-1); wheel.textContent=f; wheel.className='wheelface '+colorOf(f); if(++ticks>18){ clearInterval(iv); settle(result); } },70);
   function settle(n){
     wheel.textContent=n; wheel.className='wheelface '+colorOf(n);
     let give=0; for(const id in bets){ if(!bets[id])continue; const b=byId[id]; if(b.cover.includes(n)) give+=bets[id]*(b.pay+1); }
@@ -147,7 +156,7 @@ document.getElementById('spinBtn').onclick=async ()=>{
     banner.textContent = give>0 ? n+' — you win '+give.toLocaleString()+'! ('+(net>=0?'+':'')+net.toLocaleString()+')' : n+' — no luck this time';
     banner.className='banner '+(net>0?'win':(net<0?'lose':'push'));
     if(give>0) changeChips(give,'Roulette win');
-    bets={}; drawChips(); spinning=false;
+    bets={}; placeStack=[]; drawChips(); spinning=false;
   }
 };
 document.getElementById('topUpBtn').onclick=async()=>{ await topUp(); };
