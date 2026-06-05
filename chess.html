@@ -90,7 +90,7 @@ import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
 await requireApproved();
 renderHeader('chess.html');
 
-const GLYPH={p:'\u265F',n:'\u265E',b:'\u265D',r:'\u265C',q:'\u265B',k:'\u265A'};
+const GLYPH={p:'\u265F\uFE0E',n:'\u265E\uFE0E',b:'\u265D\uFE0E',r:'\u265C\uFE0E',q:'\u265B\uFE0E',k:'\u265A\uFE0E'};
 const FILES='abcdefgh';
 let myChips=0;
 watchWallet(w=>{ myChips=w.chips??0; refreshRating(); });

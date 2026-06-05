@@ -111,7 +111,7 @@ function isBlackjack(cards){ return cards.length===2 && val(cards)===21; }
 
 function cardEl(c, hidden){
   const d=document.createElement('div'); d.className='pcard'+(hidden?' back':'')+(!hidden&&c.c==='r'?' red':'');
-  if(!hidden){ d.innerHTML=`<span class="r">${c.r}</span><span class="s">${c.s}</span><span class="rb">${c.r}</span>`; }
+  if(!hidden){ d.innerHTML=`<span class="r">${c.r}</span><span class="s">${c.s}\uFE0E</span><span class="rb">${c.r}</span>`; }
   return d;
 }
 function render(hideHole){

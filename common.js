@@ -129,8 +129,8 @@ export async function listAllPlayers(){
   try{ return (await getDocs(collection(db,'players'))).docs.map(d=>({uid:d.id, ...d.data()})); }
   catch(e){ return []; }
 }
-export async function setApproved(targetUid, val){ try{ await updateDoc(doc(db,'players',targetUid),{approved:val}); }catch(e){ console.warn(e.message); } }
-export async function setRole(targetUid, role){ try{ await updateDoc(doc(db,'players',targetUid),{role}); }catch(e){ console.warn(e.message); } }
+export async function setApproved(targetUid, val){ try{ await updateDoc(doc(db,'players',targetUid),{approved:val}); return true; }catch(e){ console.warn(e.message); return false; } }
+export async function setRole(targetUid, role){ try{ await updateDoc(doc(db,'players',targetUid),{role}); return true; }catch(e){ console.warn(e.message); return false; } }
 
 /* ---------- shared header ---------- */
 export function renderHeader(active){

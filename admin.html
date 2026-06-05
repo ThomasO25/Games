@@ -58,11 +58,16 @@ function rowHTML(p, waiting){
     <div class="pmeta">${p.email||''} · rating ${p.rating||800} · ${(p.chips||0).toLocaleString()} chips</div></div>
     <div class="pact">${acts}</div></div>`;
 }
+const RULES_HINT='Couldn\u2019t update this member. This means your Firestore security rules don\u2019t let hosts edit other members yet. Publish the host rules once (they\u2019re in the chat), then this works from the site every time.';
 function wire(){
-  document.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{ await setApproved(b.dataset.approve,true); render(); });
-  document.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=async()=>{ if(confirm('Revoke access?')){ await setApproved(b.dataset.revoke,false); render(); } });
-  document.querySelectorAll('[data-promote]').forEach(b=>b.onclick=async()=>{ await setRole(b.dataset.promote,'admin'); await setApproved(b.dataset.promote,true); render(); });
-  document.querySelectorAll('[data-demote]').forEach(b=>b.onclick=async()=>{ await setRole(b.dataset.demote,'player'); render(); });
+  document.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true; b.textContent='\u2026';
+    const ok=await setApproved(b.dataset.approve,true);
+    if(ok) render(); else { b.disabled=false; b.textContent='Approve'; alert(RULES_HINT); }
+  });
+  document.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=async()=>{ if(!confirm('Revoke access?'))return; b.disabled=true; const ok=await setApproved(b.dataset.revoke,false); if(ok) render(); else { b.disabled=false; alert(RULES_HINT); } });
+  document.querySelectorAll('[data-promote]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const ok=await setRole(b.dataset.promote,'admin'); if(ok){ await setApproved(b.dataset.promote,true); render(); } else { b.disabled=false; alert(RULES_HINT); } });
+  document.querySelectorAll('[data-demote]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const ok=await setRole(b.dataset.demote,'player'); if(ok) render(); else { b.disabled=false; alert(RULES_HINT); } });
 }
 render();
 </script>
