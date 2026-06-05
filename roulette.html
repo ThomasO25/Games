@@ -34,7 +34,7 @@
 <div class="wrap">
   <header class="appbar"></header>
   <h2 class="title">Roulette</h2>
-  <p class="lead">European single-zero wheel. Pick a chip, place it on numbers or outside bets, then spin.</p>
+  <p class="lead">European single-zero wheel. $5 table minimum — drop $1 chips on the numbers (at least $5 across them), or $5+ on the outside bets.</p>
 
   <div class="felt">
     <div class="wheelface green" id="wheel">–</div>
@@ -43,10 +43,10 @@
   </div>
 
   <div class="chipsel" id="chipSel">
-    <div class="chipbtn c5" data-v="5">5</div>
-    <div class="chipbtn c25 sel" data-v="25">25</div>
+    <div class="chipbtn c1" data-v="1">1</div>
+    <div class="chipbtn c5 sel" data-v="5">5</div>
+    <div class="chipbtn c25" data-v="25">25</div>
     <div class="chipbtn c100" data-v="100">100</div>
-    <div class="chipbtn c500" data-v="500">500</div>
   </div>
 
   <div class="outside">
@@ -85,7 +85,8 @@ await requireApproved();
 renderHeader('roulette.html');
 
 const RED=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-let chips=0, active=25, bets={}, spinning=false;
+let chips=0, active=5, bets={}, spinning=false;
+const TABLE_MIN=5, INSIDE_MIN=5;
 watchWallet(w=>{ chips=w.chips??0; document.getElementById('brokeUI').classList.toggle('hidden', chips>0); });
 
 function colorOf(n){ return n===0?'green':(RED.has(n)?'red':'black'); }
@@ -98,6 +99,7 @@ for(let n=1;n<=36;n++){ const c=document.createElement('div'); c.className='ncel
 
 function place(id){
   if(spinning) return;
+  if(active===1 && !id.startsWith('n:')){ flash('$1 chips go on numbers only'); return; }
   if(total()+active>chips){ flash('Not enough chips'); return; }
   bets[id]=(bets[id]||0)+active; refresh();
 }
@@ -131,7 +133,10 @@ function won(id,n){
 function flash(t){ const b=document.getElementById('banner'); b.textContent=t; b.className='banner push'; }
 
 document.getElementById('spinBtn').onclick=async ()=>{
-  if(spinning) return; const stake=total(); if(stake<=0){ flash('Place a bet first'); return; }
+  if(spinning) return; const stake=total();
+  if(stake<TABLE_MIN){ flash('Table minimum is $'+TABLE_MIN); return; }
+  const inside=Object.entries(bets).filter(([k])=>k.startsWith('n:')).reduce((a,[,v])=>a+v,0);
+  if(inside>0 && inside<INSIDE_MIN){ flash('Put at least $'+INSIDE_MIN+' across the numbers'); return; }
   spinning=true; await changeChips(-stake,'Roulette bets');
   const result=Math.floor(Math.random()*37);
   const wheel=document.getElementById('wheel'); const banner=document.getElementById('banner');

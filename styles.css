@@ -115,6 +115,7 @@ h2.title{font-family:'Cormorant Garamond';font-weight:600;font-size:29px;margin:
   font-weight:700;font-size:13px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;transition:.12s}
 .chipbtn:active{transform:scale(.92)}
 .c5{background:#b33} .c25{background:#2a7d4f} .c100{background:#2b3a6b} .c500{background:#5b2c6b}
+.c1{background:#6b6b6b}
 
 /* ---- result banner ---- */
 .banner{text-align:center;font-family:'Cormorant Garamond';font-size:26px;font-weight:600;margin:12px 0;min-height:30px}

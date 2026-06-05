@@ -9,6 +9,8 @@
   #view{position:relative;width:100%;height:74vh;min-height:420px;border-radius:14px;overflow:hidden;
     border:1px solid var(--line);background:#9ec6e6;box-shadow:var(--shadow);touch-action:none;cursor:crosshair}
   #view canvas{display:block}
+  #view:fullscreen{width:100vw;height:100vh;min-height:0;border-radius:0;border:none}
+  #view:-webkit-full-screen{width:100vw;height:100vh;min-height:0;border-radius:0;border:none}
   #cross{position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none;opacity:.8}
   #cross:before,#cross:after{content:'';position:absolute;background:#fff;box-shadow:0 0 2px rgba(0,0,0,.6)}
   #cross:before{left:8px;top:0;width:2px;height:18px}#cross:after{top:8px;left:0;height:2px;width:18px}
@@ -46,6 +48,7 @@
 
   <div class="toolbar">
     <div class="modeToggle"><button id="bBuild" class="on">Build</button><button id="bBreak">Break</button></div>
+    <button class="btn ghost" id="fsBtn">⛶ Fullscreen</button>
     <button class="btn ghost" id="saveBtn">Save</button>
     <button class="btn ghost" id="resetBtn">New world</button>
   </div>
@@ -247,6 +250,15 @@ try{
   drawHotbar();
   document.getElementById('saveBtn').onclick=()=>{ save(); const b=document.getElementById('saveBtn'); b.textContent='Saved ✓'; setTimeout(()=>b.textContent='Save',1200); };
   document.getElementById('resetBtn').onclick=()=>{ if(confirm('Generate a fresh world? Your current build is replaced.')){ genWorld(); buildMesh(); respawn(); save(); } };
+  const fsBtn=document.getElementById('fsBtn');
+  fsBtn.onclick=()=>{
+    const d=document;
+    if(d.fullscreenElement||d.webkitFullscreenElement){ (d.exitFullscreen||d.webkitExitFullscreen).call(d); }
+    else { const fn=wrap.requestFullscreen||wrap.webkitRequestFullscreen; if(fn) fn.call(wrap); else alert('Fullscreen isn’t supported in this browser.'); }
+  };
+  function onFs(){ setTimeout(resize,60); const on=!!(document.fullscreenElement||document.webkitFullscreenElement); fsBtn.textContent = on?'⤢ Exit full':'⛶ Fullscreen'; if(on && !isTouch && canvas.requestPointerLock) canvas.requestPointerLock(); }
+  document.addEventListener('fullscreenchange', onFs);
+  document.addEventListener('webkitfullscreenchange', onFs);
 
   // ---- persistence ----
   function save(){ try{ const arr=[]; for(const [k,t] of blocks){ const [x,y,z]=k.split(',').map(Number); arr.push([x,y,z,t]); } localStorage.setItem('sandbox_v2', JSON.stringify(arr)); }catch(_){} }
