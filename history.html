@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Chip History · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+<style>
+  .bigbal{text-align:center;margin:6px 0 18px}
+  .bigbal .v{font-family:'Cormorant Garamond';font-size:52px;font-weight:700;color:var(--brass-lite);line-height:1}
+  .bigbal .l{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--faint)}
+  .chart{display:flex;align-items:flex-end;gap:3px;height:120px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:12px;margin-bottom:18px;overflow:hidden}
+  .chart .bar{flex:1;min-width:2px;background:linear-gradient(180deg,var(--brass),#8a6d28);border-radius:2px 2px 0 0;transition:height .3s}
+  .ledger{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .lrow{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--line);font-size:14px}
+  .lrow:last-child{border-bottom:none}
+  .lrow .reason{color:var(--text)} .lrow .when{font-size:11px;color:var(--faint);margin-top:2px}
+  .lrow .delta{font-variant-numeric:tabular-nums;font-weight:600}
+  .lrow .delta.up{color:var(--green)} .lrow .delta.down{color:var(--red)}
+  .lrow .bal{font-size:11px;color:var(--muted);text-align:right;margin-top:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar"></header>
+  <h2 class="title">Chip History</h2>
+
+  <div class="bigbal"><div class="v" id="bal">—</div><div class="l">current balance</div></div>
+  <div class="chart" id="chart"></div>
+  <div class="ledger" id="ledger"><div class="empty" style="padding:14px">Loading…</div></div>
+  <footer>Every bet, win, and top-up — newest first.</footer>
+</div>
+
+<script type="module">
+import { requireAuth, ensureAccount, renderHeader, watchWallet, listLedger } from './common.js';
+const user = await requireAuth();
+await ensureAccount(user);
+renderHeader('history.html');
+
+watchWallet(w=>{ document.getElementById('bal').textContent=(w.chips??0).toLocaleString(); });
+
+const rows = await listLedger(120);            // newest first
+const ledger=document.getElementById('ledger');
+if(!rows.length){ ledger.innerHTML='<div class="empty" style="padding:14px">No activity yet. Win some chips at the tables!</div>'; }
+else {
+  // chart: oldest→newest balances
+  const chrono=[...rows].reverse();
+  const bals=chrono.map(r=>r.balance||0);
+  const max=Math.max(...bals,1);
+  document.getElementById('chart').innerHTML = bals.map(b=>`<div class="bar" style="height:${Math.max(3,b/max*100)}%"></div>`).join('');
+  // ledger list
+  ledger.innerHTML = rows.map(r=>{
+    const up=(r.delta||0)>=0;
+    const dt = r.ts && r.ts.seconds ? new Date(r.ts.seconds*1000) : null;
+    const when = dt ? dt.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' · '+dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div class="lrow">
+      <div><div class="reason">${r.reason||'Play'}</div><div class="when">${when}</div></div>
+      <div style="text-align:right"><div class="delta ${up?'up':'down'}">${up?'+':''}${(r.delta||0).toLocaleString()}</div><div class="bal">${(r.balance||0).toLocaleString()} chips</div></div>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

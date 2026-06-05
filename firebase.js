@@ -1,9 +1,14 @@
-// ============ firebase.js — initialise once, share everywhere ============
+// ============ firebase.js — init once, share auth + firestore ============
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
-  collection, getDocs, serverTimestamp, runTransaction, deleteField
+  collection, getDocs, addDoc, query, orderBy, limit,
+  serverTimestamp, runTransaction, deleteField
 } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
+import {
+  getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, signOut, updateProfile
+} from "https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCaA2z5CHJy_uXmdE-BWH_ktSVBOcCvBAk",
@@ -17,11 +22,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
-// analytics is optional; guard it so a blocked/insecure context can't break the page
-try {
-  const { getAnalytics } = await import("https://www.gstatic.com/firebasejs/12.14.0/firebase-analytics.js");
-  getAnalytics(app);
-} catch (e) { /* fine without it */ }
-
-export { db, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, getDocs, serverTimestamp, runTransaction, deleteField };
+export {
+  db, auth,
+  doc, getDoc, setDoc, updateDoc, onSnapshot,
+  collection, getDocs, addDoc, query, orderBy, limit,
+  serverTimestamp, runTransaction, deleteField,
+  onAuthStateChanged, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, signOut, updateProfile
+};

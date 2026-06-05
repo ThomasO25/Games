@@ -56,11 +56,12 @@
 </div>
 
 <script type="module">
-import { ensurePlayer, renderHeader, playerId, playerName } from './common.js';
+import { requireAuth, ensureAccount, renderHeader, uid, userName, saveGame } from './common.js';
 import { db, doc, getDoc, setDoc, updateDoc, onSnapshot } from './firebase.js';
 import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
 
-await ensurePlayer();
+const user = await requireAuth();
+await ensureAccount(user);
 renderHeader('chess.html');
 
 const GLYPH={p:'\u265F',n:'\u265E',b:'\u265D',r:'\u265C',q:'\u265B',k:'\u265A'};
@@ -69,11 +70,28 @@ const FILES='abcdefgh';
 
 let game, mode='pass', selected=null, legalTargets=[], lastMove=null, pendingPromo=null, flip=false;
 let online=null; // {code, color, white, black, moves, unsub}
+let savedThisGame=false;
 
 function squareName(r,c){ return FILES[c] + (8-r); }
 function newGame(){
-  game=new Chess(); selected=null; legalTargets=[]; lastMove=null;
+  game=new Chess(); selected=null; legalTargets=[]; lastMove=null; savedThisGame=false;
   renderBoard(); updateStatus(); renderMoves();
+}
+
+function resultString(){
+  if(game.isCheckmate()) return game.turn()==='w' ? '0-1' : '1-0';
+  if(game.isStalemate()||game.isDraw()) return '1/2-1/2';
+  return '*';
+}
+function maybeSaveGame(){
+  if(savedThisGame || !game || !game.isGameOver()) return;
+  savedThisGame=true;
+  const hist=game.history({verbose:true});
+  let opponent='Pass & Play', color='w';
+  if(mode==='cpu') opponent='The House';
+  else if(mode==='online' && online){ opponent = (online.color==='w' ? (online.black||'Opponent') : (online.white||'Opponent')); color=online.color; }
+  saveGame({ mode, opponent, color, result:resultString(),
+    pgn:game.pgn(), moves:hist.map(m=>({san:m.san,from:m.from,to:m.to,promotion:m.promotion||null})) });
 }
 function rebuildFromMoves(moves){
   game=new Chess();
@@ -171,6 +189,7 @@ function updateStatus(){
   }
   if(game.inCheck() && !game.isGameOver()){ t+=' — check!'; msg.classList.add('alert'); }
   msg.textContent=t;
+  maybeSaveGame();
 }
 function renderMoves(){
   const ml=document.getElementById('moveList'); const hist=game.history();
@@ -220,7 +239,7 @@ document.getElementById('joinToggle').onclick=()=>document.getElementById('joinF
 document.getElementById('createBtn').onclick=async ()=>{
   const code=genCode();
   try{
-    await setDoc(doc(db,'matches',code), { white:playerName(), whiteId:playerId(), black:null, blackId:null, moves:[], createdAt:Date.now() });
+    await setDoc(doc(db,'matches',code), { white:userName(), whiteId:uid(), black:null, blackId:null, moves:[], createdAt:Date.now() });
   }catch(e){ document.getElementById('lobbyNote').textContent='Could not reach Firebase — is the page hosted over https?'; return; }
   startOnline(code,'w');
   document.getElementById('lobbyNote').innerHTML='Your room code is <b style="color:var(--brass-lite);letter-spacing:2px">'+code+'</b> — send it to your opponent. You play White.';
@@ -231,9 +250,9 @@ document.getElementById('joinBtn').onclick=async ()=>{
   let snap; try{ snap=await getDoc(doc(db,'matches',code)); }catch(e){ document.getElementById('lobbyNote').textContent='Could not reach Firebase.'; return; }
   if(!snap.exists()){ document.getElementById('lobbyNote').textContent='No room with that code.'; return; }
   const d=snap.data(); let color;
-  if(d.whiteId===playerId()) color='w';
-  else if(d.blackId===playerId()) color='b';
-  else if(!d.blackId){ await updateDoc(doc(db,'matches',code), { black:playerName(), blackId:playerId() }); color='b'; }
+  if(d.whiteId===uid()) color='w';
+  else if(d.blackId===uid()) color='b';
+  else if(!d.blackId){ await updateDoc(doc(db,'matches',code), { black:userName(), blackId:uid() }); color='b'; }
   else { document.getElementById('lobbyNote').textContent='That room is full.'; return; }
   startOnline(code,color);
   document.getElementById('lobbyNote').innerHTML='Joined room <b style="color:var(--brass-lite)">'+code+'</b>. You play '+(color==='w'?'White':'Black')+'.';

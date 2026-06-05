@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sign in · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+<style>
+  .authbox{max-width:360px;margin:8vh auto 0;text-align:center}
+  .authbox .glyph{font-size:40px;color:var(--brass)}
+  .authbox h1{font-family:'Cormorant Garamond';font-weight:700;font-size:38px;margin:6px 0 2px}
+  .authbox .sub{color:var(--muted);font-size:14px;margin-bottom:26px}
+  .authfield{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--text);
+    border-radius:11px;padding:14px 15px;font-family:'Spectral';font-size:16px;margin-bottom:11px;text-align:left}
+  .authfield:focus{outline:none;border-color:var(--brass)}
+  .err{color:var(--red);font-size:13px;min-height:18px;margin:4px 0 10px}
+  .toggle{margin-top:18px;color:var(--muted);font-size:13.5px}
+  .toggle a{cursor:pointer;color:var(--brass-lite);text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="authbox">
+    <div class="glyph">&#9824;</div>
+    <h1>The Parlour</h1>
+    <div class="sub" id="sub">Sign in to take your seat.</div>
+
+    <input class="authfield" id="name" placeholder="Display name" autocomplete="nickname" style="display:none"/>
+    <input class="authfield" id="email" type="email" placeholder="Email" autocomplete="email"/>
+    <input class="authfield" id="pass" type="password" placeholder="Password (6+ characters)" autocomplete="current-password"/>
+    <div class="err" id="err"></div>
+    <button class="btn primary" id="goBtn" style="width:100%">Sign in</button>
+
+    <div class="toggle" id="toggle">New here? <a id="toggleLink">Create an account</a></div>
+  </div>
+  <footer>The Parlour · private games for family &amp; friends</footer>
+</div>
+
+<script type="module">
+import { auth, onAuthStateChanged, createUserWithEmailAndPassword,
+         signInWithEmailAndPassword, updateProfile } from './firebase.js';
+import { ensureAccount } from './common.js';
+
+let mode='in'; // 'in' or 'up'
+const $=id=>document.getElementById(id);
+
+// already signed in? go straight to the hub
+onAuthStateChanged(auth, u=>{ if(u) location.href='index.html'; });
+
+function toggleMode(){
+  mode = mode==='in' ? 'up' : 'in';
+  const up = mode==='up';
+  $('name').style.display = up ? 'block' : 'none';
+  $('goBtn').textContent = up ? 'Create account' : 'Sign in';
+  $('sub').textContent = up ? 'Set up your seat at the table.' : 'Sign in to take your seat.';
+  $('pass').autocomplete = up ? 'new-password' : 'current-password';
+  $('toggle').innerHTML = up ? 'Already a member? <a id="toggleLink">Sign in</a>'
+                             : 'New here? <a id="toggleLink">Create an account</a>';
+  $('toggleLink').onclick = toggleMode;
+  $('err').textContent='';
+}
+$('toggleLink').onclick = toggleMode;
+
+async function submit(){
+  const email=$('email').value.trim(), pass=$('pass').value, name=$('name').value.trim();
+  $('err').textContent='';
+  if(!email || pass.length<6){ $('err').textContent='Enter an email and a 6+ character password.'; return; }
+  $('goBtn').disabled=true; $('goBtn').textContent='…';
+  try{
+    if(mode==='up'){
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      if(name) await updateProfile(cred.user, { displayName: name });
+      await ensureAccount(cred.user);
+    } else {
+      const cred = await signInWithEmailAndPassword(auth, email, pass);
+      await ensureAccount(cred.user);
+    }
+    location.href='index.html';
+  }catch(e){
+    $('err').textContent = friendly(e.code || e.message);
+    $('goBtn').disabled=false; $('goBtn').textContent = mode==='up'?'Create account':'Sign in';
+  }
+}
+function friendly(code){
+  if(/email-already-in-use/.test(code)) return 'That email already has an account — try signing in.';
+  if(/invalid-credential|wrong-password|user-not-found/.test(code)) return 'Email or password is incorrect.';
+  if(/invalid-email/.test(code)) return 'That email address looks off.';
+  if(/weak-password/.test(code)) return 'Password needs at least 6 characters.';
+  if(/unauthorized-domain/.test(code)) return 'This site’s domain isn’t authorised in Firebase yet (Authentication → Settings → Authorized domains).';
+  if(/operation-not-allowed/.test(code)) return 'Email sign-in isn’t enabled in Firebase yet (Authentication → Sign-in method).';
+  if(/network/.test(code)) return 'Network problem — check your connection.';
+  return 'Something went wrong: '+code;
+}
+$('goBtn').onclick=submit;
+$('pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+</script>
+</body>
+</html>

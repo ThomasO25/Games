@@ -10,51 +10,47 @@
 <div class="wrap">
   <header class="appbar"></header>
 
-  <div class="eyebrow">Members only &middot; established this week</div>
+  <div class="eyebrow">Members only</div>
   <h1 class="title">The Parlour</h1>
-  <p class="lead">A private games room for you, your brother, and whoever you invite. Play chips are on the house &mdash; everyone starts with a stack. Pull up a chair.</p>
+  <p class="lead">A private games room for you, your brother, and whoever you invite. Play chips are on the house. Pull up a chair.</p>
 
   <div class="section-label">The Tables</div>
   <div class="cards">
     <a class="card live" href="chess.html">
-      <span class="badge">Online</span>
-      <span class="ico">&#9818;</span>
-      <h3>Chess</h3>
-      <p>Pass &amp; play, face the house, or invite someone with a room code.</p>
+      <span class="badge">Online</span><span class="ico">&#9818;</span>
+      <h3>Chess</h3><p>Pass &amp; play, face the house, or invite someone with a room code.</p>
     </a>
     <a class="card live" href="blackjack.html">
-      <span class="badge">Open</span>
-      <span class="ico">&#9824;</span>
-      <h3>Blackjack</h3>
-      <p>You versus the dealer. Hit, stand, double &mdash; chase the 21.</p>
+      <span class="badge">Open</span><span class="ico">&#9824;</span>
+      <h3>Blackjack</h3><p>Eight-deck shoe versus the dealer. Counting welcome.</p>
     </a>
     <a class="card live" href="roulette.html">
-      <span class="badge">Open</span>
-      <span class="ico">&#9862;</span>
-      <h3>Roulette</h3>
-      <p>European wheel. Reds, blacks, dozens, or a number with your name on it.</p>
+      <span class="badge">Open</span><span class="ico">&#9862;</span>
+      <h3>Roulette</h3><p>European wheel. Reds, blacks, dozens, or your lucky number.</p>
     </a>
     <a class="card soon" href="poker.html">
-      <span class="badge">Soon</span>
-      <span class="ico">&#9827;</span>
-      <h3>Poker</h3>
-      <p>Texas Hold&rsquo;em around one virtual table. In the workshop.</p>
+      <span class="badge">Soon</span><span class="ico">&#9827;</span>
+      <h3>Poker</h3><p>Texas Hold&rsquo;em around one table. In the workshop.</p>
     </a>
   </div>
 
-  <div class="section-label">In the Workshop</div>
+  <div class="section-label">Train &amp; Track</div>
   <div class="cards">
-    <a class="card soon" href="pool.html">
-      <span class="badge">Soon</span>
-      <span class="ico">&#127921;</span>
-      <h3>Pool</h3>
-      <p>8-ball on green felt. Physics in progress.</p>
+    <a class="card live" href="puzzles.html">
+      <span class="badge">Daily</span><span class="ico">&#9881;</span>
+      <h3>Puzzles</h3><p>Endless practice plus a daily mate. Build your streak.</p>
+    </a>
+    <a class="card live" href="review.html">
+      <span class="badge">New</span><span class="ico">&#9851;</span>
+      <h3>Game Review</h3><p>Replay your chess games and spot where they turned.</p>
+    </a>
+    <a class="card live" href="history.html">
+      <span class="badge">New</span><span class="ico">&#9655;</span>
+      <h3>Chip History</h3><p>Your balance over time and every transaction.</p>
     </a>
     <a class="card soon" href="canasta.html">
-      <span class="badge">Soon</span>
-      <span class="ico">&#127183;</span>
-      <h3>Canasta</h3>
-      <p>The classic rummy night, brought online.</p>
+      <span class="badge">Soon</span><span class="ico">&#127183;</span>
+      <h3>Canasta</h3><p>The classic rummy night, online.</p>
     </a>
   </div>
 
@@ -62,8 +58,9 @@
 </div>
 
 <script type="module">
-  import { ensurePlayer, renderHeader } from './common.js';
-  await ensurePlayer();
+  import { requireAuth, ensureAccount, renderHeader } from './common.js';
+  const user = await requireAuth();
+  await ensureAccount(user);
   renderHeader('index.html');
 </script>
 </body>

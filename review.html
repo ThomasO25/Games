@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Review · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+<style>
+  .glist{display:flex;flex-direction:column;gap:9px}
+  .grow{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:13px 15px;cursor:pointer;transition:.15s}
+  .grow:hover{border-color:var(--brass)} .grow:active{transform:scale(.99)}
+  .grow .res{font-family:'Cormorant Garamond';font-size:21px;font-weight:700;width:54px;text-align:center}
+  .grow .res.w{color:var(--brass-lite)} .grow .res.l{color:var(--red)} .grow .res.d{color:var(--muted)}
+  .grow .meta{flex:1;min-width:0}
+  .grow .meta .ttl{font-size:14.5px;font-weight:500}
+  .grow .meta .when{font-size:11.5px;color:var(--faint);margin-top:2px}
+  .grow .arr{color:var(--faint);font-size:18px}
+  .matwrap{margin-top:14px}
+  .matlbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;letter-spacing:.5px}
+  .matbar{height:10px;border-radius:6px;background:var(--pc-black);overflow:hidden;border:1px solid var(--line)}
+  .matbar i{display:block;height:100%;background:linear-gradient(90deg,var(--pc-white),#d8cbac);transition:width .3s}
+  .swing{margin-top:10px;font-size:13.5px;color:var(--muted);line-height:1.5;min-height:20px}
+  .swing b{color:var(--red)}
+  .mistakes{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .mistakes h4{font-family:'Cormorant Garamond';font-size:18px;margin:0 0 8px;font-weight:600}
+  .mistakes .mi{font-size:13px;color:var(--muted);padding:4px 0;cursor:pointer;border-bottom:1px solid var(--line)}
+  .mistakes .mi:last-child{border-bottom:none}
+  .mistakes .mi b{color:var(--red)} .mistakes .mi:hover{color:var(--text)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar"></header>
+  <h2 class="title">Review Room</h2>
+  <p class="lead" id="lead">Your saved games, ready to replay move by move.</p>
+
+  <div class="glist" id="gameList"></div>
+
+  <div id="reviewer" class="hidden">
+    <div class="row" style="margin-bottom:14px"><button class="btn ghost" id="backList">← All games</button></div>
+    <div class="board-frame"><div class="board" id="revBoard"></div></div>
+    <div class="matwrap">
+      <div class="matlbl"><span>Material balance</span><span id="matText">even</span></div>
+      <div class="matbar"><i id="matFill" style="width:50%"></i></div>
+      <div class="swing" id="swing"></div>
+    </div>
+    <div class="row">
+      <button class="btn" id="rStart">|←</button>
+      <button class="btn" id="rPrev">← Prev</button>
+      <button class="btn" id="rNext">Next →</button>
+      <button class="btn" id="rEnd">→|</button>
+    </div>
+    <div class="moves" id="rMoves"></div>
+    <div class="mistakes" id="mistakes"></div>
+  </div>
+  <footer>Material-based review. Big swings mark where a game turned.</footer>
+</div>
+
+<script type="module">
+import { requireAuth, ensureAccount, renderHeader, listGames } from './common.js';
+import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
+const user = await requireAuth();
+await ensureAccount(user);
+renderHeader('review.html');
+
+const GLYPH={p:'\u265F',n:'\u265E',b:'\u265D',r:'\u265C',q:'\u265B',k:'\u265A'};
+const VAL={p:1,n:3,b:3,r:5,q:9,k:0};
+const FILES='abcdefgh';
+
+async function load(){
+  document.getElementById('reviewer').classList.add('hidden');
+  const list=document.getElementById('gameList'); list.classList.remove('hidden');
+  list.innerHTML='<div class="empty">Loading…</div>';
+  const games=await listGames();
+  if(!games.length){ list.innerHTML='<div class="empty">No saved games yet. Finish a game of Chess and it lands here automatically.</div>'; return; }
+  list.innerHTML='';
+  games.forEach(g=>{
+    const me = g.color==='w' ? 'w':'b';
+    let rc='d', rt='½'; 
+    if(g.result==='1-0'){ rt='1–0'; rc = me==='w'?'w':'l'; }
+    else if(g.result==='0-1'){ rt='0–1'; rc = me==='b'?'w':'l'; }
+    const dt = g.ts && g.ts.seconds ? new Date(g.ts.seconds*1000) : new Date();
+    const row=document.createElement('div'); row.className='grow';
+    row.innerHTML=`<div class="res ${rc}">${rt}</div>
+      <div class="meta"><div class="ttl">vs ${g.opponent||'—'} · ${g.moves?g.moves.length:0} half-moves</div>
+      <div class="when">${dt.toLocaleDateString(undefined,{month:'short',day:'numeric'})} · ${dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} · ${g.mode==='cpu'?'vs House':(g.mode==='online'?'Online':'Pass & Play')}</div></div>
+      <div class="arr">›</div>`;
+    row.onclick=()=>open(g);
+    list.appendChild(row);
+  });
+}
+
+let moves=[], idx=0, matSeries=[], myColor='w';
+function material(c){ let w=0,b=0; c.board().forEach(r=>r.forEach(p=>{ if(p){ if(p.color==='w')w+=VAL[p.type]; else b+=VAL[p.type]; } })); return w-b; }
+function open(g){
+  document.getElementById('gameList').classList.add('hidden');
+  document.getElementById('reviewer').classList.remove('hidden');
+  moves=g.moves||[]; idx=0; myColor=g.color||'w';
+  const t=new Chess(); matSeries=[material(t)];
+  moves.forEach(m=>{ try{ t.move({from:m.from,to:m.to,promotion:m.promotion||'q'}); }catch(e){} matSeries.push(material(t)); });
+  buildMistakes(); draw();
+}
+function positionAt(i){ const c=new Chess(); for(let k=0;k<i;k++){ try{ c.move({from:moves[k].from,to:moves[k].to,promotion:moves[k].promotion||'q'}); }catch(e){} } return c; }
+function draw(){
+  const c=positionAt(idx); const grid=c.board();
+  const el=document.getElementById('revBoard'); el.innerHTML='';
+  let lm=null; if(idx>0) lm={from:moves[idx-1].from,to:moves[idx-1].to};
+  for(let r=0;r<8;r++)for(let cc=0;cc<8;cc++){
+    const name=FILES[cc]+(8-r); const sq=document.createElement('div');
+    sq.className='sq '+(((r+cc)%2)?'dark':'light');
+    if(lm&&(lm.from===name||lm.to===name)) sq.classList.add('last');
+    const p=grid[r][cc]; if(p){const s=document.createElement('span');s.className='piece '+p.color;s.textContent=GLYPH[p.type];sq.appendChild(s);}
+    el.appendChild(sq);
+  }
+  const bal=matSeries[idx]; const pct=Math.max(5,Math.min(95,50+bal*5));
+  document.getElementById('matFill').style.width=pct+'%';
+  document.getElementById('matText').textContent = bal===0?'even':(bal>0?('White +'+bal):('Black +'+(-bal)));
+  const sw=document.getElementById('swing');
+  if(idx>0){
+    const swing=matSeries[idx]-matSeries[idx-1];
+    const mover=((idx-1)%2===0)?'White':'Black';
+    if(Math.abs(swing)>=3) sw.innerHTML=`<b>Big swing.</b> ${mover}’s ${moves[idx-1].san} shifted material by ${Math.abs(swing)}.`;
+    else if(Math.abs(swing)===2) sw.innerHTML=`A 2-point trade on ${moves[idx-1].san}.`;
+    else sw.textContent='';
+  } else sw.textContent='';
+  const ml=document.getElementById('rMoves'); let html='';
+  for(let i=0;i<moves.length;i+=2){ html+=`<span class="num">${i/2+1}.</span><span class="mv ${idx===i+1?'cur':''}">${moves[i].san}</span>`; if(moves[i+1]) html+=`<span class="mv ${idx===i+2?'cur':''}">${moves[i+1].san}</span>`; }
+  ml.innerHTML=html;
+}
+function buildMistakes(){
+  const box=document.getElementById('mistakes');
+  const meWhite = myColor==='w';
+  const N=moves.length;
+  const items=[];
+  for(let k=0;k<N;k++){
+    const moverWhite = (k%2===0);
+    if(moverWhite!==meWhite) continue;
+    const before = matSeries[k];
+    const after  = (k+2<=N) ? matSeries[k+2] : matSeries[k+1]; // include opponent's reply
+    const delta  = after - before;            // change in (White − Black)
+    const myLoss = meWhite ? -delta : delta;   // material I gave up across my move + reply
+    if(myLoss>=2) items.push({ply:k+1, san:moves[k].san, lost:myLoss, num:Math.floor(k/2)+1});
+  }
+  items.sort((a,b)=>b.lost-a.lost);
+  if(!items.length){ box.innerHTML='<h4>Your mistakes</h4><div class="mi">No big material drops on your moves — clean game!</div>'; return; }
+  box.innerHTML='<h4>Your costly moves</h4>'+items.slice(0,6).map(it=>
+    `<div class="mi" data-ply="${it.ply}">Move ${it.num} — <b>${it.san}</b> cost about ${it.lost} points. <span style="color:var(--brass-lite)">Tap to view</span></div>`).join('');
+  box.querySelectorAll('.mi[data-ply]').forEach(el=> el.onclick=()=>{ idx=Number(el.dataset.ply); draw(); window.scrollTo({top:0,behavior:'smooth'}); });
+}
+document.getElementById('backList').onclick=load;
+document.getElementById('rStart').onclick=()=>{idx=0;draw();};
+document.getElementById('rPrev').onclick=()=>{if(idx>0){idx--;draw();}};
+document.getElementById('rNext').onclick=()=>{if(idx<moves.length){idx++;draw();}};
+document.getElementById('rEnd').onclick=()=>{idx=moves.length;draw();};
+
+load();
+</script>
+</body>
+</html>

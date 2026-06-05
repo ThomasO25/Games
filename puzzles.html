@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Puzzles · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+<style>
+  .pzstats{display:flex;gap:10px;margin-bottom:14px}
+  .stat{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+  .stat .v{font-family:'Cormorant Garamond';font-size:26px;font-weight:700;color:var(--brass-lite)}
+  .stat .l{font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint)}
+  .pzbadge{display:inline-block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--brass);
+    border:1px solid var(--brass);border-radius:20px;padding:3px 11px;margin-bottom:10px}
+  .pzmsg{text-align:center;font-size:15.5px;min-height:24px;font-weight:500;margin:12px 0 2px}
+  .pzmsg.ok{color:var(--green)} .pzmsg.no{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar"></header>
+  <h2 class="title">Puzzles</h2>
+
+  <div class="modes" id="modes">
+    <span class="pill on" data-mode="practice">Practice</span>
+    <span class="pill" data-mode="daily">Daily</span>
+  </div>
+
+  <div class="pzstats">
+    <div class="stat"><div class="v" id="stStreak">0</div><div class="l">Streak</div></div>
+    <div class="stat"><div class="v" id="stBest">0</div><div class="l">Best</div></div>
+    <div class="stat"><div class="v" id="stSolved">0</div><div class="l">Solved</div></div>
+  </div>
+
+  <span class="pzbadge" id="pzMeta">—</span>
+  <div class="status"><span class="dot" id="pzDot"></span><span class="msg" id="pzTurn"></span></div>
+  <div class="board-frame"><div class="board" id="pzBoard"></div></div>
+  <div class="pzmsg" id="pzMsg">Find the move.</div>
+  <div class="row">
+    <button class="btn ghost" id="pzReset">Reset</button>
+    <button class="btn" id="pzHint">Hint</button>
+    <button class="btn primary" id="pzNext">Next puzzle</button>
+  </div>
+  <footer>Find the checkmate. Solve to build your streak.</footer>
+</div>
+
+<script type="module">
+import { requireAuth, ensureAccount, renderHeader, recordPuzzle, watchWallet } from './common.js';
+import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
+const user = await requireAuth();
+await ensureAccount(user);
+renderHeader('puzzles.html');
+
+const GLYPH={p:'\u265F',n:'\u265E',b:'\u265D',r:'\u265C',q:'\u265B',k:'\u265A'};
+const FILES='abcdefgh';
+const PUZZLES=[
+ {fen:'6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1',sol:'Ra8#',theme:'Back-rank mate',tip:'The back rank has no escape.'},
+ {fen:'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 0 1',sol:'Qxf7#',theme:'Scholar\u2019s mate',tip:'f7 is the weakest square.'},
+ {fen:'k7/8/1K6/8/8/8/8/7R w - - 0 1',sol:'Rh8#',theme:'Rook & king',tip:'Your king cuts off the escape.'},
+ {fen:'6k1/4Rppp/8/8/8/8/5PPP/6K1 w - - 0 1',sol:'Re8#',theme:'Back-rank mate',tip:'The rook does it alone.'},
+ {fen:'7k/6pp/8/8/8/8/8/5R1K w - - 0 1',sol:'Rf8#',theme:'Back-rank mate',tip:'Slide to the back rank.'},
+ {fen:'1k6/1P6/1K6/8/8/8/8/3R4 w - - 0 1',sol:'Rd8#',theme:'Supported mate',tip:'Your pawn blocks the flight.'},
+ {fen:'6k1/pp4pp/8/8/8/8/PP4PP/4Q1K1 w - - 0 1',sol:'Qe8#',theme:'Queen back rank',tip:'The queen sweeps in.'},
+ {fen:'7k/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1',sol:'Re8#',theme:'Back-rank mate',tip:'Straight to the eighth.'},
+ {fen:'7k/5Q2/6K1/8/8/8/8/8 w - - 0 1',sol:'Qg7#',theme:'Queen & king',tip:'King supports the queen.'},
+ {fen:'k7/2Q5/1K6/8/8/8/8/8 w - - 0 1',sol:'Qc8#',theme:'Queen & king',tip:'Corner the king.'},
+ {fen:'6k1/5ppp/8/8/8/8/8/R6K w - - 0 1',sol:'Ra8#',theme:'Back-rank mate',tip:'Nothing guards the eighth.'},
+];
+
+let mode='practice', order=[], oi=0, pz, puzzle, sel=null, targets=[], solved=false, scored=false;
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function todayIndex(){ const d=new Date(); return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5)%PUZZLES.length; }
+
+function refreshStats(){
+  // pull from header wallet snapshot? simpler: read once via a quick fetch is overkill; use local counters mirrored from recordPuzzle
+}
+function setStats(s){ document.getElementById('stStreak').textContent=s.streak; document.getElementById('stBest').textContent=s.best; document.getElementById('stSolved').textContent=s.solved; }
+let stats={streak:0,best:0,solved:0};
+watchWallet(w=>{ stats={streak:w.puzStreak||0, best:w.puzBest||0, solved:w.puzSolved||0}; setStats(stats); });
+
+function loadPuzzle(p){
+  puzzle=p; pz=new Chess(p.fen); sel=null;targets=[];solved=false;scored=false;
+  document.getElementById('pzMeta').textContent = (mode==='daily'?'Daily · ':'')+p.theme+' · mate in 1';
+  document.getElementById('pzDot').className='dot '+pz.turn();
+  document.getElementById('pzTurn').textContent=(pz.turn()==='w'?'White':'Black')+' to move and mate';
+  const m=document.getElementById('pzMsg'); m.textContent='Find the checkmate.'; m.className='pzmsg';
+  render();
+}
+function nextPractice(){ if(oi>=order.length){ order=shuffle([...Array(PUZZLES.length).keys()]); oi=0; } loadPuzzle(PUZZLES[order[oi++]]); }
+function render(){
+  const el=document.getElementById('pzBoard'); el.innerHTML='';
+  const grid=pz.board();
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const name=FILES[c]+(8-r); const sq=document.createElement('div');
+    sq.className='sq '+(((r+c)%2)?'dark':'light');
+    if(sel===name) sq.classList.add('sel');
+    const p=grid[r][c]; if(p){const s=document.createElement('span');s.className='piece '+p.color;s.textContent=GLYPH[p.type];sq.appendChild(s);}
+    if(targets.find(m=>m.to===name)){const h=document.createElement('span');h.className='hint';sq.appendChild(h);}
+    sq.onclick=()=>onSq(name); el.appendChild(sq);
+  }
+}
+async function onSq(name){
+  if(solved) return;
+  const tgt=targets.find(m=>m.to===name);
+  if(tgt){
+    const obj={from:tgt.from,to:tgt.to}; if(tgt.flags.includes('p')) obj.promotion='q';
+    const res=pz.move(obj);
+    if(res && res.san===puzzle.sol){
+      solved=true; sel=null;targets=[]; render();
+      const m=document.getElementById('pzMsg'); m.textContent='✓ Checkmate — solved!'; m.className='pzmsg ok';
+      if(!scored){ scored=true; await recordPuzzle(true); }
+    } else {
+      pz.undo();
+      const m=document.getElementById('pzMsg'); m.textContent='Not mate — try again.'; m.className='pzmsg no';
+      if(!scored){ scored=true; await recordPuzzle(false); }
+      sel=null;targets=[]; render();
+    }
+    return;
+  }
+  const p=pz.get(name);
+  if(p && p.color===pz.turn()){ sel=name; targets=pz.moves({square:name,verbose:true}); } else { sel=null; targets=[]; }
+  render();
+}
+document.getElementById('pzReset').onclick=()=>loadPuzzle(puzzle);
+document.getElementById('pzHint').onclick=()=>{ const m=document.getElementById('pzMsg'); m.textContent='Hint: '+puzzle.tip; m.className='pzmsg'; };
+document.getElementById('pzNext').onclick=()=>{ if(mode==='daily'){ loadPuzzle(PUZZLES[todayIndex()]); } else nextPractice(); };
+document.querySelectorAll('#modes .pill').forEach(p=>p.onclick=()=>{
+  document.querySelectorAll('#modes .pill').forEach(x=>x.classList.remove('on')); p.classList.add('on'); mode=p.dataset.mode;
+  if(mode==='daily') loadPuzzle(PUZZLES[todayIndex()]); else { order=shuffle([...Array(PUZZLES.length).keys()]); oi=0; nextPractice(); }
+});
+
+setStats(stats);
+order=shuffle([...Array(PUZZLES.length).keys()]); oi=0; nextPractice();
+</script>
+</body>
+</html>

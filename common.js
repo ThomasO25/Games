@@ -1,60 +1,96 @@
-// ============ common.js — identity, wallet, shared header ============
-import { db, doc, getDoc, setDoc, updateDoc, onSnapshot, runTransaction } from './firebase.js';
+// ============ common.js — accounts, wallet, ledger, games, header ============
+import {
+  db, auth, doc, getDoc, setDoc, updateDoc, onSnapshot,
+  collection, getDocs, addDoc, query, orderBy, limit,
+  serverTimestamp, runTransaction, onAuthStateChanged, signOut
+} from './firebase.js';
 
 const START_CHIPS = 1000;
+let _user = null;
 
-// ---- identity (lightweight; fine for family use) ----
-export function playerId(){
-  let id = localStorage.getItem('gp_id');
-  if(!id){ id = 'p_' + Math.random().toString(36).slice(2,10); localStorage.setItem('gp_id', id); }
-  return id;
+/* ---------- auth gate ---------- */
+export function requireAuth(){
+  return new Promise(resolve=>{
+    onAuthStateChanged(auth, user=>{
+      if(user){ _user = user; resolve(user); }
+      else { location.href = 'login.html'; }
+    });
+  });
 }
-export function playerName(){ return localStorage.getItem('gp_name') || ''; }
-export function setPlayerName(n){ localStorage.setItem('gp_name', n.trim().slice(0,20)); }
+export function currentUser(){ return _user; }
+export function uid(){ return _user ? _user.uid : null; }
+export function userName(){ return _user ? (_user.displayName || _user.email || 'Player') : ''; }
+export function signOutNow(){ signOut(auth).then(()=>location.href='login.html'); }
 
-export async function ensurePlayer(){
-  if(!playerName()){
-    const n = prompt("Pick a name for the Parlour:", "") || "Guest";
-    setPlayerName(n || "Guest");
-  }
-  const ref = doc(db, 'players', playerId());
+/* ---------- account doc ---------- */
+export async function ensureAccount(user){
+  _user = user || _user;
+  if(!_user) return;
+  const ref = doc(db,'players',_user.uid);
   try{
     const snap = await getDoc(ref);
     if(!snap.exists()){
-      await setDoc(ref, { name: playerName(), chips: START_CHIPS });
-    } else if(snap.data().name !== playerName()){
-      await updateDoc(ref, { name: playerName() });
+      await setDoc(ref, { name:userName(), email:_user.email||'', chips:START_CHIPS,
+        puzSolved:0, puzStreak:0, puzBest:0, createdAt:serverTimestamp() });
     }
-  }catch(e){ console.warn('wallet init failed (host over https to use Firebase):', e.message); }
+  }catch(e){ console.warn('account init failed:', e.message); }
 }
 
 export function watchWallet(cb){
-  try{
-    return onSnapshot(doc(db,'players',playerId()), s=>{ if(s.exists()) cb(s.data()); });
-  }catch(e){ cb({name:playerName(),chips:START_CHIPS}); return ()=>{}; }
+  if(!uid()){ cb({chips:0}); return ()=>{}; }
+  try{ return onSnapshot(doc(db,'players',uid()), s=>{ if(s.exists()) cb(s.data()); }); }
+  catch(e){ cb({chips:START_CHIPS}); return ()=>{}; }
 }
 
-// atomic chip change; returns new balance (or null on failure)
-export async function changeChips(delta){
-  const ref = doc(db,'players',playerId());
+/* atomic chip change + ledger entry; returns new balance */
+export async function changeChips(delta, reason='Play'){
+  const ref = doc(db,'players',uid());
+  let next=null;
   try{
-    let out=null;
     await runTransaction(db, async tx=>{
       const s = await tx.get(ref);
-      const cur = s.exists()? (s.data().chips||0) : START_CHIPS;
-      const next = Math.max(0, cur + delta);
-      tx.set(ref, { name: playerName(), chips: next }, { merge:true });
-      out = next;
+      const cur = s.exists() ? (s.data().chips||0) : START_CHIPS;
+      next = Math.max(0, cur + delta);
+      tx.update(ref, { chips: next });
     });
-    return out;
-  }catch(e){ console.warn('chip update failed:', e.message); return null; }
+    try{ await addDoc(collection(db,'players',uid(),'ledger'),
+      { ts:serverTimestamp(), delta, balance:next, reason }); }catch(e){}
+    return next;
+  }catch(e){ console.warn('chip change failed:', e.message); return null; }
+}
+export async function topUp(){ return changeChips(START_CHIPS, 'Top-up'); }
+
+export async function listLedger(n=100){
+  try{ const q=query(collection(db,'players',uid(),'ledger'), orderBy('ts','desc'), limit(n));
+    const snap=await getDocs(q); return snap.docs.map(d=>d.data()); }
+  catch(e){ return []; }
 }
 
-export async function topUp(){ // free refill if broke
-  return changeChips(START_CHIPS);
+/* ---------- saved games ---------- */
+export async function saveGame(rec){
+  try{ await addDoc(collection(db,'players',uid(),'games'), { ts:serverTimestamp(), ...rec }); }
+  catch(e){ console.warn('save game failed:', e.message); }
+}
+export async function listGames(n=60){
+  try{ const q=query(collection(db,'players',uid(),'games'), orderBy('ts','desc'), limit(n));
+    const snap=await getDocs(q); return snap.docs.map(d=>({id:d.id, ...d.data()})); }
+  catch(e){ return []; }
 }
 
-// ---- shared header ----
+/* ---------- puzzle stats ---------- */
+export async function recordPuzzle(success){
+  const ref=doc(db,'players',uid());
+  try{
+    await runTransaction(db, async tx=>{
+      const s=await tx.get(ref); const d=s.data()||{};
+      let solved=d.puzSolved||0, streak=d.puzStreak||0, best=d.puzBest||0;
+      if(success){ solved++; streak++; if(streak>best) best=streak; } else { streak=0; }
+      tx.update(ref, { puzSolved:solved, puzStreak:streak, puzBest:best });
+    });
+  }catch(e){}
+}
+
+/* ---------- shared header ---------- */
 export function renderHeader(active){
   const bar = document.querySelector('.appbar');
   if(!bar) return;
@@ -68,20 +104,13 @@ export function renderHeader(active){
     </div>
     <div class="right">
       <div class="wallet">
-        <span class="coin">$</span>
-        <span id="chipCount">—</span>
-        <span class="who" id="whoBtn" title="Change name">${playerName()||'set name'}</span>
+        <span class="coin">$</span><span id="chipCount">—</span>
+        <span class="who" id="whoBtn" title="Sign out">${userName()}</span>
       </div>
     </div>`;
-  const goHome = ()=>location.href='index.html';
-  document.getElementById('brandBtn').onclick = goHome;
-  const bb = document.getElementById('backBtn'); if(bb) bb.onclick = goHome;
-  document.getElementById('whoBtn').onclick = ()=>{
-    const n = prompt("Change your name:", playerName());
-    if(n){ setPlayerName(n); ensurePlayer(); document.getElementById('whoBtn').textContent = playerName(); }
-  };
-  watchWallet(w=>{
-    const el = document.getElementById('chipCount');
-    if(el) el.textContent = (w.chips??0).toLocaleString();
-  });
+  const goHome=()=>location.href='index.html';
+  document.getElementById('brandBtn').onclick=goHome;
+  const bb=document.getElementById('backBtn'); if(bb) bb.onclick=goHome;
+  document.getElementById('whoBtn').onclick=()=>{ if(confirm('Sign out of the Parlour?')) signOutNow(); };
+  watchWallet(w=>{ const el=document.getElementById('chipCount'); if(el) el.textContent=(w.chips??0).toLocaleString(); });
 }
