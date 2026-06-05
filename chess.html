@@ -10,6 +10,13 @@
   .ratingLine{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;color:var(--muted);margin-bottom:12px}
   .ratingLine b{color:var(--brass-lite);font-size:16px}
   .wagerRow{display:flex;gap:7px;flex-wrap:wrap;margin:4px 0 12px;align-items:center}
+  .clocks{display:flex;gap:10px;margin-bottom:10px}
+  .clockbox{flex:1;display:flex;align-items:center;justify-content:space-between;background:var(--panel);
+    border:1px solid var(--line);border-radius:11px;padding:9px 14px}
+  .clockbox.active{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass)}
+  .clockbox.low .ctime{color:var(--red)}
+  .clabel{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint)}
+  .ctime{font-family:'Cormorant Garamond';font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
 </style>
 </head>
 <body>
@@ -17,7 +24,15 @@
   <header class="appbar"></header>
   <h2 class="title">Chess</h2>
 
-  <div class="ratingLine"><span>Your rating</span><b id="ratingVal">—</b></div>
+  <div class="ratingLine"><span id="ratingLbl">Rating</span><b id="ratingVal">—</b></div>
+
+  <div class="miniLabel">Time control</div>
+  <div class="modes" id="timeControls">
+    <span class="pill on" data-tc="casual">Casual</span>
+    <span class="pill" data-tc="bullet">Bullet 1+0</span>
+    <span class="pill" data-tc="blitz">Blitz 3+2</span>
+    <span class="pill" data-tc="rapid">Rapid 10+0</span>
+  </div>
 
   <div class="modes" id="modes">
     <span class="pill on" data-mode="pass">Pass &amp; Play</span>
@@ -25,7 +40,6 @@
     <span class="pill" data-mode="online">Online</span>
   </div>
 
-  <!-- bot strength (cpu mode) -->
   <div id="botPanel" class="hidden">
     <div class="miniLabel">Bot strength</div>
     <div class="modes" id="botLevels">
@@ -36,7 +50,6 @@
     </div>
   </div>
 
-  <!-- online lobby -->
   <div class="panel hidden" id="lobby">
     <div class="miniLabel">Wager (winner takes the pot)</div>
     <div class="wagerRow" id="wagerRow">
@@ -53,8 +66,13 @@
       <input class="field" id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off"/>
       <button class="btn primary" id="joinBtn" style="width:100%;margin-top:10px">Join</button>
     </div>
-    <div class="note" id="lobbyNote">Set a wager, create a room, then send the 4-letter code to your opponent.</div>
+    <div class="note" id="lobbyNote">Set a time control + wager, create a room, then send the 4-letter code.</div>
     <button class="btn ghost hidden" id="leaveBtn" style="width:100%;margin-top:10px">Leave this room</button>
+  </div>
+
+  <div class="clocks hidden" id="clocks">
+    <div class="clockbox" id="clockTop"><span class="clabel">Black</span><span class="ctime" id="ctimeB">—</span></div>
+    <div class="clockbox" id="clockBot"><span class="clabel">White</span><span class="ctime" id="ctimeW">—</span></div>
   </div>
 
   <div class="status">
@@ -74,19 +92,15 @@
     <button class="btn red hidden" id="resignBtn">Resign</button>
   </div>
   <div class="moves" id="moveList"><span class="empty">Moves will appear here…</span></div>
-
-  <footer>Pass &amp; Play and the bots work offline. Online &amp; wagers need the page hosted over https.</footer>
+  <footer>Casual is unrated. Bullet, Blitz, and Rapid each track their own rating, like real chess.</footer>
 </div>
 
-<div class="overlay" id="promoOverlay">
-  <div class="modal"><h4>Promote to…</h4><div class="promo-opts" id="promoOpts"></div></div>
-</div>
+<div class="overlay" id="promoOverlay"><div class="modal"><h4>Promote to…</h4><div class="promo-opts" id="promoOpts"></div></div></div>
 
 <script type="module">
 import { requireApproved, renderHeader, uid, userName, saveGame, myRating, updateRating, changeChips, watchWallet } from './common.js';
 import { db, doc, getDoc, setDoc, updateDoc, onSnapshot } from './firebase.js';
 import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm';
-
 await requireApproved();
 renderHeader('chess.html');
 
@@ -94,83 +108,119 @@ const GLYPH={p:'\u265F\uFE0E',n:'\u265E\uFE0E',b:'\u265D\uFE0E',r:'\u265C\uFE0E'
 const FILES='abcdefgh';
 let myChips=0;
 watchWallet(w=>{ myChips=w.chips??0; refreshRating(); });
-function refreshRating(){ const el=document.getElementById('ratingVal'); if(el) el.textContent=myRating(); }
+
+const TC={ casual:{ms:0,inc:0,cat:null}, bullet:{ms:60000,inc:0,cat:'Bullet'}, blitz:{ms:180000,inc:2000,cat:'Blitz'}, rapid:{ms:600000,inc:0,cat:'Rapid'} };
+let tc='casual';
+function refreshRating(){ const cat=TC[tc].cat; document.getElementById('ratingLbl').textContent = cat?(cat+' rating'):'Rating'; document.getElementById('ratingVal').textContent = cat?myRating(cat):'casual · unrated'; }
 refreshRating();
 
-/* ============ engine ============ */
+/* ---------- engine ---------- */
 const PVAL={p:100,n:320,b:330,r:500,q:900,k:20000};
 const PST_P=[0,0,0,0,0,0,0,0,50,50,50,50,50,50,50,50,10,10,20,30,30,20,10,10,5,5,10,25,25,10,5,5,0,0,0,20,20,0,0,0,5,-5,-10,0,0,-10,-5,5,5,10,10,-20,-20,10,10,5,0,0,0,0,0,0,0,0];
 const PST_N=[-50,-40,-30,-30,-30,-30,-40,-50,-40,-20,0,0,0,0,-20,-40,-30,0,10,15,15,10,0,-30,-30,5,15,20,20,15,5,-30,-30,0,15,20,20,15,0,-30,-30,5,10,15,15,10,5,-30,-40,-20,0,5,5,0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50];
-const Z=new Array(64).fill(0);
-const PST={p:PST_P,n:PST_N,b:PST_N,r:Z,q:Z,k:Z};
+const Z=new Array(64).fill(0); const PST={p:PST_P,n:PST_N,b:PST_N,r:Z,q:Z,k:Z};
 function evalBoard(g){ let s=0; const b=g.board(); for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=b[r][c];if(!p)continue;const idx=r*8+c;const t=p.color==='w'?idx:(7-r)*8+c;const v=PVAL[p.type]+(PST[p.type][t]||0);s+=p.color==='w'?v:-v;} return s; }
-function negamax(g,d,a,b){
-  if(g.isCheckmate()) return -100000-d;
-  if(g.isStalemate()||g.isInsufficientMaterial()||g.isThreefoldRepetition()||g.isDraw()) return 0;
-  if(d===0){ const e=evalBoard(g); return g.turn()==='w'?e:-e; }
-  let best=-1e9; const ms=g.moves({verbose:true});
-  ms.sort((x,y)=>(y.captured?PVAL[y.captured]:0)-(x.captured?PVAL[x.captured]:0));
-  for(const m of ms){ g.move({from:m.from,to:m.to,promotion:m.promotion}); const sc=-negamax(g,d-1,-b,-a); g.undo(); if(sc>best)best=sc; if(best>a)a=best; if(a>=b)break; }
-  return best;
-}
+function negamax(g,d,a,b){ if(g.isCheckmate())return -100000-d; if(g.isStalemate()||g.isInsufficientMaterial()||g.isThreefoldRepetition()||g.isDraw())return 0; if(d===0){const e=evalBoard(g);return g.turn()==='w'?e:-e;} let best=-1e9; const ms=g.moves({verbose:true}); ms.sort((x,y)=>(y.captured?PVAL[y.captured]:0)-(x.captured?PVAL[x.captured]:0)); for(const m of ms){g.move({from:m.from,to:m.to,promotion:m.promotion});const sc=-negamax(g,d-1,-b,-a);g.undo();if(sc>best)best=sc;if(best>a)a=best;if(a>=b)break;} return best; }
 const LEVELS={300:{depth:1,noise:300,blunder:0.45},500:{depth:1,noise:160,blunder:0.25},800:{depth:2,noise:70,blunder:0.10},1100:{depth:2,noise:25,blunder:0.02}};
 let botElo=300;
-function pickEngineMove(g,cfg){
-  const ms=g.moves({verbose:true}); if(!ms.length) return null;
-  if(Math.random()<cfg.blunder) return ms[Math.floor(Math.random()*ms.length)];
-  let scored=[];
-  for(const m of ms){ g.move({from:m.from,to:m.to,promotion:m.promotion}); let sc=-negamax(g,cfg.depth-1,-1e9,1e9); g.undo(); sc+=(Math.random()*2-1)*cfg.noise; scored.push({m,sc}); }
-  scored.sort((x,y)=>y.sc-x.sc); return scored[0].m;
-}
+function pickEngineMove(g,cfg){ const ms=g.moves({verbose:true}); if(!ms.length)return null; if(Math.random()<cfg.blunder)return ms[Math.floor(Math.random()*ms.length)]; let sc=[]; for(const m of ms){g.move({from:m.from,to:m.to,promotion:m.promotion});let v=-negamax(g,cfg.depth-1,-1e9,1e9);g.undo();v+=(Math.random()*2-1)*cfg.noise;sc.push({m,v});} sc.sort((x,y)=>y.v-x.v); return sc[0].m; }
 
-/* ============ game state ============ */
+/* ---------- state ---------- */
 let game, mode='pass', selected=null, legalTargets=[], lastMove=null, pendingPromo=null, flip=false;
 let online=null, savedThisGame=false, ratedThisGame=false, selectedWager=0;
+let clk={w:0,b:0,inc:0,active:null,last:0,on:false}, offlineTimedOut=null;
 
-function squareName(r,c){ return FILES[c] + (8-r); }
-function newGame(){ game=new Chess(); selected=null; legalTargets=[]; lastMove=null; savedThisGame=false; ratedThisGame=false; renderBoard(); updateStatus(); renderMoves(); }
-function resultString(){ if(game.isCheckmate()) return game.turn()==='w'?'0-1':'1-0'; if(game.isStalemate()||game.isDraw()) return '1/2-1/2'; return '*'; }
+function squareName(r,c){ return FILES[c]+(8-r); }
+function newGame(){ game=new Chess(); selected=null;legalTargets=[];lastMove=null;savedThisGame=false;ratedThisGame=false;offlineTimedOut=null; startOfflineClock(); renderBoard(); updateStatus(); renderMoves(); }
+function fmt(ms){ ms=Math.max(0,ms); const s=Math.floor(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+
+/* ---------- clocks ---------- */
+function startOfflineClock(){
+  if(mode==='online'){ return; }
+  if(TC[tc].ms===0){ clk.on=false; document.getElementById('clocks').classList.add('hidden'); return; }
+  clk={w:TC[tc].ms,b:TC[tc].ms,inc:TC[tc].inc,active:'w',last:Date.now(),on:true};
+  document.getElementById('clocks').classList.remove('hidden'); drawClocks();
+}
+function drawClocks(){
+  let wt, bt, act;
+  if(mode==='online' && online && online.timed){
+    const stm=(online.moves.length%2===0)?'w':'b';
+    const live=(online.started && !onlineOver())? online[stm+'Time']-(Date.now()-online.lastMoveAt) : online[stm+'Time'];
+    wt = stm==='w'?live:online.wTime; bt = stm==='b'?live:online.bTime; act=stm;
+    document.getElementById('clocks').classList.remove('hidden');
+  } else if(clk.on){
+    wt=clk.w; bt=clk.b; act=clk.active;
+  } else { return; }
+  document.getElementById('ctimeW').textContent=fmt(wt);
+  document.getElementById('ctimeB').textContent=fmt(bt);
+  document.getElementById('clockBot').classList.toggle('active', act==='w');
+  document.getElementById('clockTop').classList.toggle('active', act==='b');
+  document.getElementById('clockBot').classList.toggle('low', wt<20000);
+  document.getElementById('clockTop').classList.toggle('low', bt<20000);
+}
+setInterval(()=>{
+  if(mode!=='online'){
+    if(clk.on && !offlineOver()){ const now=Date.now(); const el=now-clk.last; clk[clk.active]-=el; clk.last=now; if(clk[clk.active]<=0){ clk[clk.active]=0; clk.on=false; offlineTimedOut=clk.active; updateStatus(); } drawClocks(); }
+  } else if(online && online.timed && online.started && !onlineOver()){
+    const stm=(online.moves.length%2===0)?'w':'b';
+    const live=online[stm+'Time']-(Date.now()-online.lastMoveAt);
+    if(stm===online.color && live<=0){ try{ updateDoc(doc(db,'matches',online.code),{flaggedBy:uid()}); }catch(e){} }
+    drawClocks();
+  }
+},200);
+function offlineOver(){ return game.isGameOver() || offlineTimedOut!=null; }
+function onlineOver(){ return online && (game.isGameOver() || online.flaggedBy || online.resignedBy); }
+
+/* ---------- end handling ---------- */
+function resultString(){
+  if(offlineTimedOut) return offlineTimedOut==='w'?'0-1':'1-0';
+  if(mode==='online' && online){
+    if(online.flaggedBy) return online.flaggedBy===online.whiteId?'0-1':'1-0';
+    if(online.resignedBy) return online.resignedBy===online.whiteId?'0-1':'1-0';
+  }
+  if(game.isCheckmate()) return game.turn()==='w'?'0-1':'1-0';
+  if(game.isStalemate()||game.isDraw()) return '1/2-1/2';
+  return '*';
+}
+function concluded(){ return mode==='online'? onlineOver() : offlineOver(); }
 function maybeSaveGame(){
-  if(savedThisGame || !game || !game.isGameOver()) return;
-  savedThisGame=true;
+  if(savedThisGame || !concluded()) return; savedThisGame=true;
   const hist=game.history({verbose:true});
   let opponent='Pass & Play', color='w';
-  if(mode==='cpu'){ opponent='Bot '+botElo; }
+  if(mode==='cpu') opponent='Bot '+botElo;
   else if(mode==='online' && online){ opponent=(online.color==='w'?(online.black||'Opponent'):(online.white||'Opponent')); color=online.color; }
-  saveGame({ mode, opponent, color, result:resultString(),
+  saveGame({ mode, opponent, color, result:resultString(), timeControl:tc,
     pgn:game.pgn(), moves:hist.map(m=>({san:m.san,from:m.from,to:m.to,promotion:m.promotion||null})) });
 }
-function rebuildFromMoves(moves){
-  game=new Chess();
-  for(const m of moves){ try{ game.move(m.promotion?{from:m.from,to:m.to,promotion:m.promotion}:{from:m.from,to:m.to}); }catch(e){} }
-  const h=game.history({verbose:true}); lastMove=h.length?{from:h[h.length-1].from,to:h[h.length-1].to}:null;
-  selected=null; legalTargets=[];
+function handleOfflineRating(){
+  if(mode!=='cpu' || ratedThisGame || !offlineOver()) return;
+  const cat=TC[tc].cat; if(!cat) return; ratedThisGame=true;
+  let myScore;
+  if(offlineTimedOut) myScore = offlineTimedOut==='w'?0:1;
+  else myScore = (game.isDraw()||game.isStalemate()||game.isInsufficientMaterial())?0.5:(game.turn()==='b'?1:0);
+  updateRating(cat, botElo, myScore).then(refreshRating);
 }
+
+function rebuildFromMoves(moves){ game=new Chess(); for(const m of moves){ try{ game.move(m.promotion?{from:m.from,to:m.to,promotion:m.promotion}:{from:m.from,to:m.to}); }catch(e){} } const h=game.history({verbose:true}); lastMove=h.length?{from:h[h.length-1].from,to:h[h.length-1].to}:null; selected=null; legalTargets=[]; }
 
 function renderBoard(){
   const el=document.getElementById('board'); el.innerHTML='';
-  const top=document.getElementById('topCoords');
-  if(top && !top.dataset.done){ top.innerHTML=FILES.split('').map(f=>`<span>${f}</span>`).join(''); top.dataset.done='1'; }
+  const top=document.getElementById('topCoords'); if(top && !top.dataset.done){ top.innerHTML=FILES.split('').map(f=>`<span>${f}</span>`).join(''); top.dataset.done='1'; }
   const grid=game.board(); let checkSq=null;
   if(game.inCheck()){ const t=game.turn(); grid.forEach((row,r)=>row.forEach((p,c)=>{ if(p&&p.type==='k'&&p.color===t) checkSq=squareName(r,c); })); }
-  const order=[...Array(8).keys()];
-  const rows=flip?[...order].reverse():order, cols=flip?[...order].reverse():order;
+  const order=[...Array(8).keys()]; const rows=flip?[...order].reverse():order, cols=flip?[...order].reverse():order;
   for(const r of rows) for(const c of cols){
-    const name=squareName(r,c); const sq=document.createElement('div');
-    sq.className='sq '+(((r+c)%2)?'dark':'light');
+    const name=squareName(r,c); const sq=document.createElement('div'); sq.className='sq '+(((r+c)%2)?'dark':'light');
     if(lastMove&&(lastMove.from===name||lastMove.to===name)) sq.classList.add('last');
-    if(selected===name) sq.classList.add('sel');
-    if(checkSq===name) sq.classList.add('check');
-    const p=grid[r][c];
-    if(p){ const pc=document.createElement('span'); pc.className='piece '+p.color; pc.textContent=GLYPH[p.type]; sq.appendChild(pc); }
-    const tgt=legalTargets.find(m=>m.to===name);
-    if(tgt){ const h=document.createElement('span'); h.className='hint'+((tgt.captured||tgt.flags.includes('e'))?' cap':''); sq.appendChild(h); }
+    if(selected===name) sq.classList.add('sel'); if(checkSq===name) sq.classList.add('check');
+    const p=grid[r][c]; if(p){ const pc=document.createElement('span'); pc.className='piece '+p.color; pc.textContent=GLYPH[p.type]; sq.appendChild(pc); }
+    const tgt=legalTargets.find(m=>m.to===name); if(tgt){ const h=document.createElement('span'); h.className='hint'+((tgt.captured||tgt.flags.includes('e'))?' cap':''); sq.appendChild(h); }
     sq.onclick=()=>onSquare(name); el.appendChild(sq);
   }
 }
 function myTurnOnline(){ return online && online.color===game.turn(); }
 function onSquare(name){
-  if(!game||game.isGameOver()) return;
+  if(!game||concluded()) return;
   if(mode==='cpu' && game.turn()==='b') return;
   if(mode==='online'){ if(!online||!online.color) return; if(!online.black) return; if(!myTurnOnline()) return; }
   const tgt=legalTargets.find(m=>m.to===name);
@@ -187,174 +237,126 @@ async function applyMove(obj){
   if(mode==='online' && online){
     const mv={from:res.from,to:res.to}; if(obj.promotion) mv.promotion=obj.promotion;
     const newMoves=[...online.moves, mv]; online.moves=newMoves;
-    try{ await updateDoc(doc(db,'matches',online.code), { moves:newMoves }); }catch(e){ console.warn(e); }
+    const upd={moves:newMoves};
+    if(online.timed && online.started){ const myField=online.color+'Time'; const el=Date.now()-online.lastMoveAt; const nt=Math.max(0, online[myField]-el+(online.inc||0)); online[myField]=nt; upd[online.color==='w'?'whiteTime':'blackTime']=nt; upd.lastMoveAt=Date.now(); online.lastMoveAt=upd.lastMoveAt; online.wTime=online.wTime; }
+    try{ await updateDoc(doc(db,'matches',online.code), upd); }catch(e){ console.warn(e); }
     renderBoard(); updateStatus(); renderMoves(); return;
   }
+  // offline clock: increment the mover, switch active
+  if(clk.on){ const mover=(game.turn()==='w'?'b':'w'); clk[mover]+=clk.inc; clk.active=game.turn(); clk.last=Date.now(); drawClocks(); }
   renderBoard(); updateStatus(); renderMoves();
-  if(mode==='cpu' && !game.isGameOver() && game.turn()==='b'){
-    document.getElementById('statusMsg').textContent='The House is thinking…';
-    setTimeout(houseMove, 60);
-  }
+  if(mode==='cpu' && !game.isGameOver() && game.turn()==='b'){ document.getElementById('statusMsg').textContent='The House is thinking…'; setTimeout(houseMove,60); }
 }
 function houseMove(){
-  const cfg=LEVELS[botElo]||LEVELS[300];
-  const pick=pickEngineMove(game,cfg); if(!pick) return;
+  if(offlineOver()) return;
+  const cfg=LEVELS[botElo]||LEVELS[300]; const pick=pickEngineMove(game,cfg); if(!pick) return;
   const obj={from:pick.from,to:pick.to}; if(pick.flags.includes('p')) obj.promotion='q';
   game.move(obj); lastMove={from:pick.from,to:pick.to};
+  if(clk.on){ const mover=(game.turn()==='w'?'b':'w'); clk[mover]+=clk.inc; clk.active=game.turn(); clk.last=Date.now(); drawClocks(); }
   renderBoard(); updateStatus(); renderMoves();
 }
 function updateStatus(){
   const dot=document.getElementById('turnDot'), msg=document.getElementById('statusMsg');
   dot.className='dot '+game.turn(); msg.classList.remove('alert'); dot.style.opacity=1;
-  const over=game.isGameOver();
+  const over=concluded();
   document.getElementById('resignBtn').classList.toggle('hidden', !(mode==='online' && online && online.black && !over));
-  if(game.isCheckmate()){ msg.textContent=(game.turn()==='w'?'Black':'White')+' wins by checkmate'; msg.classList.add('alert'); dot.style.opacity=.4; }
+  if(offlineTimedOut){ msg.textContent=(offlineTimedOut==='w'?'Black':'White')+' wins on time'; msg.classList.add('alert'); dot.style.opacity=.4; }
+  else if(mode==='online' && online && online.flaggedBy){ const w=online.flaggedBy===online.whiteId?'Black':'White'; msg.textContent=w+' wins on time'; msg.classList.add('alert'); }
+  else if(mode==='online' && online && online.resignedBy){ const w=online.resignedBy===online.whiteId?'Black':'White'; msg.textContent=w+' wins — opponent resigned'; msg.classList.add('alert'); }
+  else if(game.isCheckmate()){ msg.textContent=(game.turn()==='w'?'Black':'White')+' wins by checkmate'; msg.classList.add('alert'); dot.style.opacity=.4; }
   else if(game.isStalemate()){ msg.textContent='Draw — stalemate'; msg.classList.add('alert'); }
   else if(game.isInsufficientMaterial()){ msg.textContent='Draw — insufficient material'; msg.classList.add('alert'); }
   else if(game.isDraw()){ msg.textContent='Draw'; msg.classList.add('alert'); }
   else {
     let t=(game.turn()==='w'?'White':'Black')+' to move';
-    if(mode==='online' && online){ if(!online.black){ t='Room '+online.code+(online.wager?(' · '+online.wager+' chip wager'):'')+' — waiting for opponent…'; msg.classList.add('alert'); } else t=myTurnOnline()?('Your move ('+(online.color==='w'?'White':'Black')+')'):'Waiting for opponent…'; }
+    if(mode==='online' && online){ if(!online.black){ t='Room '+online.code+(online.wager?(' · '+online.wager+' wager'):'')+' — waiting for opponent…'; msg.classList.add('alert'); } else t=myTurnOnline()?('Your move ('+(online.color==='w'?'White':'Black')+')'):'Waiting for opponent…'; }
     if(game.inCheck()){ t+=' — check!'; msg.classList.add('alert'); }
     msg.textContent=t;
   }
-  maybeSaveGame();
-  // rating for bot games
-  if(over && mode==='cpu' && !ratedThisGame){
-    ratedThisGame=true;
-    const myScore = (game.isDraw()||game.isStalemate()||game.isInsufficientMaterial()) ? 0.5 : (game.turn()==='b'?1:0);
-    updateRating(botElo, myScore).then(refreshRating);
-  }
+  maybeSaveGame(); handleOfflineRating(); drawClocks();
 }
-function renderMoves(){
-  const ml=document.getElementById('moveList'); const hist=game.history();
-  if(!hist.length){ ml.innerHTML='<span class="empty">Moves will appear here…</span>'; return; }
-  let html=''; for(let i=0;i<hist.length;i+=2){ html+=`<span class="num">${i/2+1}.</span><span class="mv">${hist[i]}</span>`; if(hist[i+1]) html+=`<span class="mv">${hist[i+1]}</span>`; }
-  ml.innerHTML=html; ml.scrollTop=ml.scrollHeight;
-}
-function openPromo(color){
-  const box=document.getElementById('promoOpts'); box.innerHTML='';
-  ['q','r','b','n'].forEach(t=>{ const s=document.createElement('span'); s.textContent=GLYPH[t]; s.style.color=(color==='w'?'var(--pc-white)':'var(--pc-black)');
-    s.onclick=()=>{ document.getElementById('promoOverlay').classList.remove('show'); applyMove({from:pendingPromo.from,to:pendingPromo.to,promotion:t}); pendingPromo=null; }; box.appendChild(s); });
-  document.getElementById('promoOverlay').classList.add('show');
-}
+function renderMoves(){ const ml=document.getElementById('moveList'); const hist=game.history(); if(!hist.length){ ml.innerHTML='<span class="empty">Moves will appear here…</span>'; return; } let html=''; for(let i=0;i<hist.length;i+=2){ html+=`<span class="num">${i/2+1}.</span><span class="mv">${hist[i]}</span>`; if(hist[i+1]) html+=`<span class="mv">${hist[i+1]}</span>`; } ml.innerHTML=html; ml.scrollTop=ml.scrollHeight; }
+function openPromo(color){ const box=document.getElementById('promoOpts'); box.innerHTML=''; ['q','r','b','n'].forEach(t=>{ const s=document.createElement('span'); s.textContent=GLYPH[t]; s.style.color=(color==='w'?'var(--pc-white)':'var(--pc-black)'); s.onclick=()=>{ document.getElementById('promoOverlay').classList.remove('show'); applyMove({from:pendingPromo.from,to:pendingPromo.to,promotion:t}); pendingPromo=null; }; box.appendChild(s); }); document.getElementById('promoOverlay').classList.add('show'); }
 
-/* ---- mode + bot level + wager pills ---- */
-document.querySelectorAll('#modes .pill').forEach(p=>{
-  p.onclick=()=>{
-    document.querySelectorAll('#modes .pill').forEach(x=>x.classList.remove('on')); p.classList.add('on');
-    mode=p.dataset.mode;
-    document.getElementById('lobby').classList.toggle('hidden', mode!=='online');
-    document.getElementById('botPanel').classList.toggle('hidden', mode!=='cpu');
-    if(online && online.unsub){ online.unsub(); online=null; }
-    if(mode==='online'){ flip=false; newGame(); const s=getSavedRoom(); if(s&&s.code){ startOnline(s.code,s.color); } else { document.getElementById('leaveBtn').classList.add('hidden'); document.getElementById('statusMsg').textContent='Create or join a room.'; } }
-    else newGame();
-  };
-});
+/* ---------- pills ---------- */
+document.querySelectorAll('#timeControls .pill').forEach(p=>p.onclick=()=>{ document.querySelectorAll('#timeControls .pill').forEach(x=>x.classList.remove('on')); p.classList.add('on'); tc=p.dataset.tc; refreshRating(); if(mode!=='online'){ newGame(); } });
+document.querySelectorAll('#modes .pill').forEach(p=>{ p.onclick=()=>{ document.querySelectorAll('#modes .pill').forEach(x=>x.classList.remove('on')); p.classList.add('on'); mode=p.dataset.mode; document.getElementById('lobby').classList.toggle('hidden', mode!=='online'); document.getElementById('botPanel').classList.toggle('hidden', mode!=='cpu'); document.getElementById('clocks').classList.add('hidden'); if(online && online.unsub){ online.unsub(); online=null; } if(mode==='online'){ flip=false; newGame(); const s=getSavedRoom(); if(s&&s.code){ startOnline(s.code,s.color); } else { document.getElementById('leaveBtn').classList.add('hidden'); document.getElementById('statusMsg').textContent='Create or join a room.'; } } else newGame(); }; });
 document.querySelectorAll('#botLevels .pill').forEach(p=>p.onclick=()=>{ document.querySelectorAll('#botLevels .pill').forEach(x=>x.classList.remove('on')); p.classList.add('on'); botElo=Number(p.dataset.elo); newGame(); });
 document.querySelectorAll('#wagerRow .pill').forEach(p=>p.onclick=()=>{ document.querySelectorAll('#wagerRow .pill').forEach(x=>x.classList.remove('on')); p.classList.add('on'); selectedWager=Number(p.dataset.wager); });
-
 document.getElementById('newBtn').onclick=()=>{ if(mode==='online'){ alert('Use “Create a room” for a fresh online game.'); return; } newGame(); };
 document.getElementById('flipBtn').onclick=()=>{ flip=!flip; renderBoard(); };
-document.getElementById('undoBtn').onclick=()=>{
-  if(mode==='online'){ alert('No takebacks online — play it out!'); return; }
-  if(!game) return; game.undo();
-  if(mode==='cpu'&&game.turn()==='b'&&game.history().length) game.undo();
-  const h=game.history({verbose:true}); lastMove=h.length?{from:h[h.length-1].from,to:h[h.length-1].to}:null;
-  selected=null;legalTargets=[]; renderBoard();updateStatus();renderMoves();
-};
-document.getElementById('resignBtn').onclick=async()=>{
-  if(mode!=='online'||!online||!online.black) return;
-  if(!confirm('Resign this game?')) return;
-  try{ await updateDoc(doc(db,'matches',online.code),{resignedBy:uid()}); }catch(e){}
-};
+document.getElementById('undoBtn').onclick=()=>{ if(mode==='online'){ alert('No takebacks online.'); return; } if(!game||clk.on){ if(clk.on){ alert('No takebacks in timed games.'); return; } } game.undo(); if(mode==='cpu'&&game.turn()==='b'&&game.history().length) game.undo(); const h=game.history({verbose:true}); lastMove=h.length?{from:h[h.length-1].from,to:h[h.length-1].to}:null; selected=null;legalTargets=[]; renderBoard();updateStatus();renderMoves(); };
+document.getElementById('resignBtn').onclick=async()=>{ if(mode!=='online'||!online||!online.black) return; if(!confirm('Resign this game?')) return; try{ await updateDoc(doc(db,'matches',online.code),{resignedBy:uid()}); }catch(e){} };
 
-/* ---- online lobby ---- */
+/* ---------- online ---------- */
 function genCode(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZ'; let s=''; for(let i=0;i<4;i++) s+=A[Math.floor(Math.random()*A.length)]; return s; }
 document.getElementById('joinToggle').onclick=()=>document.getElementById('joinFields').classList.toggle('hidden');
 document.getElementById('createBtn').onclick=async ()=>{
-  const W=selectedWager;
-  if(W>myChips){ document.getElementById('lobbyNote').textContent='You need '+W+' chips to set that wager.'; return; }
-  const code=genCode();
-  try{
-    await setDoc(doc(db,'matches',code), { white:userName(), whiteId:uid(), whiteRating:myRating(), black:null, blackId:null, blackRating:null, wager:W, moves:[], resignedBy:null, createdAt:Date.now() });
-  }catch(e){ document.getElementById('lobbyNote').textContent='Could not reach Firebase — hosted over https?'; return; }
+  const W=selectedWager; if(W>myChips){ document.getElementById('lobbyNote').textContent='You need '+W+' chips for that wager.'; return; }
+  const code=genCode(); const t=TC[tc];
+  const docData={ white:userName(), whiteId:uid(), whiteRating:myRating(t.cat), black:null, blackId:null, blackRating:null,
+    wager:W, moves:[], resignedBy:null, flaggedBy:null, createdAt:Date.now(),
+    timed:t.ms>0, cat:t.cat||null, inc:t.inc, whiteTime:t.ms, blackTime:t.ms, started:false, lastMoveAt:Date.now() };
+  try{ await setDoc(doc(db,'matches',code), docData); }catch(e){ document.getElementById('lobbyNote').textContent='Could not reach Firebase.'; return; }
   if(W>0) await changeChips(-W,'Chess wager');
   localStorage.removeItem('chess_settled_'+code);
   startOnline(code,'w');
-  document.getElementById('lobbyNote').innerHTML='Room <b style="color:var(--brass-lite);letter-spacing:2px">'+code+'</b>'+(W?(' · '+W+' chip wager'):'')+' — send the code. You play White.';
+  document.getElementById('lobbyNote').innerHTML='Room <b style="color:var(--brass-lite);letter-spacing:2px">'+code+'</b> ('+tc+(W?(' · '+W+' wager'):'')+') — send the code. You play White.';
 };
 document.getElementById('joinBtn').onclick=async ()=>{
-  const code=(document.getElementById('codeInput').value||'').trim().toUpperCase();
-  if(code.length<4) return;
+  const code=(document.getElementById('codeInput').value||'').trim().toUpperCase(); if(code.length<4) return;
   let snap; try{ snap=await getDoc(doc(db,'matches',code)); }catch(e){ document.getElementById('lobbyNote').textContent='Could not reach Firebase.'; return; }
   if(!snap.exists()){ document.getElementById('lobbyNote').textContent='No room with that code.'; return; }
   const d=snap.data(); let color;
   if(d.whiteId===uid()) color='w';
   else if(d.blackId===uid()) color='b';
-  else if(!d.blackId){
-    const W=d.wager||0;
-    if(W>myChips){ document.getElementById('lobbyNote').textContent='This room has a '+W+' chip wager — you only have '+myChips+'.'; return; }
-    await updateDoc(doc(db,'matches',code), { black:userName(), blackId:uid(), blackRating:myRating() });
-    if(W>0) await changeChips(-W,'Chess wager');
-    color='b';
-  } else { document.getElementById('lobbyNote').textContent='That room is full.'; return; }
+  else if(!d.blackId){ const W=d.wager||0; if(W>myChips){ document.getElementById('lobbyNote').textContent='This room has a '+W+' wager — you have '+myChips+'.'; return; } await updateDoc(doc(db,'matches',code), { black:userName(), blackId:uid(), blackRating:myRating(d.cat), started:true, lastMoveAt:Date.now() }); if(W>0) await changeChips(-W,'Chess wager'); color='b'; }
+  else { document.getElementById('lobbyNote').textContent='That room is full.'; return; }
   localStorage.removeItem('chess_settled_'+code);
   startOnline(code,color);
-  document.getElementById('lobbyNote').innerHTML='Joined <b style="color:var(--brass-lite)">'+code+'</b>'+((d.wager)?(' · '+d.wager+' chip wager'):'')+'. You play '+(color==='w'?'White':'Black')+'.';
+  document.getElementById('lobbyNote').innerHTML='Joined <b style="color:var(--brass-lite)">'+code+'</b>. You play '+(color==='w'?'White':'Black')+'.';
 };
 function getSavedRoom(){ try{ return JSON.parse(localStorage.getItem('chess_room')||'null'); }catch(e){ return null; } }
 function startOnline(code,color){
-  if(online && online.unsub) online.unsub();
-  flip=(color==='b');
+  if(online && online.unsub) online.unsub(); flip=(color==='b');
   localStorage.setItem('chess_room', JSON.stringify({code,color}));
   document.getElementById('leaveBtn').classList.remove('hidden');
-  online={ code, color, white:null, black:null, moves:[], wager:0, unsub:null };
+  online={ code, color, white:null, black:null, whiteId:null, blackId:null, moves:[], wager:0, unsub:null, timed:false, cat:null, inc:0, wTime:0, bTime:0, started:false, lastMoveAt:Date.now() };
   online.unsub=onSnapshot(doc(db,'matches',code), snap=>{
     if(!snap.exists()){ document.getElementById('lobbyNote').textContent='This room is no longer available.'; localStorage.removeItem('chess_room'); return; }
     const d=snap.data();
-    online.white=d.white; online.black=d.black; online.moves=d.moves||[]; online.wager=d.wager||0;
+    online.white=d.white; online.black=d.black; online.whiteId=d.whiteId; online.blackId=d.blackId;
+    online.moves=d.moves||[]; online.wager=d.wager||0;
+    online.timed=!!d.timed; online.cat=d.cat||null; online.inc=d.inc||0; online.started=!!d.started;
+    online.whiteTime=d.whiteTime||0; online.blackTime=d.blackTime||0; online.wTime=d.whiteTime||0; online.bTime=d.blackTime||0;
+    online.lastMoveAt=d.lastMoveAt||Date.now(); online.flaggedBy=d.flaggedBy||null; online.resignedBy=d.resignedBy||null;
     rebuildFromMoves(online.moves);
-    renderBoard(); renderMoves();
-    if(d.resignedBy){ const winner=(d.resignedBy===d.whiteId)?'White':'Black'; document.getElementById('statusMsg').textContent=winner+' wins — opponent resigned'; document.getElementById('statusMsg').classList.add('alert'); document.getElementById('resignBtn').classList.add('hidden'); settleOnline(d); return; }
-    updateStatus();
-    if(game.isGameOver()) settleOnline(d);
+    if(online.timed){ document.getElementById('clocks').classList.remove('hidden'); } 
+    renderBoard(); renderMoves(); updateStatus();
+    if(onlineOver()) settleOnline(d);
+    drawClocks();
   });
 }
 function settleOnline(d){
-  const code=online.code;
-  if(localStorage.getItem('chess_settled_'+code)) return;
+  const code=online.code; if(localStorage.getItem('chess_settled_'+code)) return;
   let draw=false, winnerColor=null;
   if(d.resignedBy){ winnerColor=(d.resignedBy===d.whiteId)?'b':'w'; }
+  else if(d.flaggedBy){ winnerColor=(d.flaggedBy===d.whiteId)?'b':'w'; }
   else if(game.isCheckmate()){ winnerColor=(game.turn()==='w')?'b':'w'; }
   else if(game.isStalemate()||game.isInsufficientMaterial()||game.isDraw()){ draw=true; }
   else return;
   localStorage.setItem('chess_settled_'+code,'1');
-  const myColor=online.color;
-  const oppRating=(myColor==='w'?d.blackRating:d.whiteRating)||800;
+  const myColor=online.color; const oppRating=(myColor==='w'?d.blackRating:d.whiteRating)||800;
   const myScore=draw?0.5:(winnerColor===myColor?1:0);
-  updateRating(oppRating, myScore).then(refreshRating);
-  const W=d.wager||0;
-  if(W>0){ if(draw) changeChips(W,'Chess wager refund'); else if(winnerColor===myColor) changeChips(W*2,'Chess winnings'); }
+  updateRating(d.cat||null, oppRating, myScore).then(refreshRating);
+  const W=d.wager||0; if(W>0){ if(draw) changeChips(W,'Chess wager refund'); else if(winnerColor===myColor) changeChips(W*2,'Chess winnings'); }
 }
+document.getElementById('leaveBtn').onclick=()=>{ if(online && online.unsub) online.unsub(); online=null; localStorage.removeItem('chess_room'); document.getElementById('leaveBtn').classList.add('hidden'); document.getElementById('clocks').classList.add('hidden'); document.getElementById('lobbyNote').textContent='You left the room.'; newGame(); };
 
-document.getElementById('leaveBtn').onclick=()=>{
-  if(online && online.unsub) online.unsub();
-  online=null; localStorage.removeItem('chess_room');
-  document.getElementById('leaveBtn').classList.add('hidden');
-  document.getElementById('lobbyNote').textContent='You left the room. Create or join another.';
-  newGame();
-};
-
-/* ---- boot: rejoin live game if saved ---- */
+/* ---------- boot ---------- */
 const savedRoom=getSavedRoom();
-if(savedRoom && savedRoom.code){
-  mode='online';
-  document.querySelectorAll('#modes .pill').forEach(x=>x.classList.toggle('on', x.dataset.mode==='online'));
-  document.getElementById('lobby').classList.remove('hidden');
-  newGame(); startOnline(savedRoom.code, savedRoom.color);
-  document.getElementById('lobbyNote').innerHTML='Back in room <b style="color:var(--brass-lite)">'+savedRoom.code+'</b>.';
-} else { newGame(); }
+if(savedRoom && savedRoom.code){ mode='online'; document.querySelectorAll('#modes .pill').forEach(x=>x.classList.toggle('on', x.dataset.mode==='online')); document.getElementById('lobby').classList.remove('hidden'); newGame(); startOnline(savedRoom.code, savedRoom.color); document.getElementById('lobbyNote').innerHTML='Back in room <b style="color:var(--brass-lite)">'+savedRoom.code+'</b>.'; }
+else { newGame(); }
 </script>
 </body>
 </html>

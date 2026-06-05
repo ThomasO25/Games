@@ -33,7 +33,8 @@ export function userName(){ return _user ? (_user.displayName || _user.email || 
 export function signOutNow(){ signOut(auth).then(()=>location.href='login.html'); }
 export function getAccount(){ return _account; }
 export function isAdmin(){ return !!(_account && _account.role==='admin'); }
-export function myRating(){ return (_account && _account.rating) || START_RATING; }
+export function myRating(cat){ if(!_account) return START_RATING; if(cat) return _account['rating'+cat]||START_RATING; return _account.rating||START_RATING; }
+export function getRatings(){ const a=_account||{}; return { Bullet:a.ratingBullet||START_RATING, Blitz:a.ratingBlitz||START_RATING, Rapid:a.ratingRapid||START_RATING }; }
 
 /* ---------- account doc ---------- */
 export async function ensureAccount(user){
@@ -46,7 +47,8 @@ export async function ensureAccount(user){
       let isFirst=false;
       try{ const all=await getDocs(collection(db,'players')); isFirst=all.empty; }catch(e){}
       await setDoc(ref, { name:userName(), email:_user.email||'', chips:START_CHIPS,
-        rating:START_RATING, approved:isFirst, role:isFirst?'admin':'player',
+        rating:START_RATING, ratingBullet:START_RATING, ratingBlitz:START_RATING, ratingRapid:START_RATING,
+        approved:isFirst, role:isFirst?'admin':'player',
         puzSolved:0, puzStreak:0, puzBest:0, wins:0, losses:0, draws:0, createdAt:serverTimestamp() });
       snap = await getDoc(ref);
     }
@@ -85,18 +87,19 @@ export async function listLedger(n=120){
 }
 
 /* ---------- ratings ---------- */
-export async function updateRating(oppRating, score){ // score: 1 win, .5 draw, 0 loss
+export async function updateRating(cat, oppRating, score){ // cat: 'Bullet'|'Blitz'|'Rapid'|null
+  const field = cat ? ('rating'+cat) : 'rating';
   const ref=doc(db,'players',uid()); let nr=null;
   try{
     await runTransaction(db, async tx=>{
-      const s=await tx.get(ref); const d=s.data()||{}; const cur=d.rating||START_RATING;
+      const s=await tx.get(ref); const d=s.data()||{}; const cur=d[field]||START_RATING;
       const exp=1/(1+Math.pow(10,(oppRating-cur)/400));
       nr=Math.round(cur+32*(score-exp));
-      const upd={rating:nr};
+      const upd={}; upd[field]=nr;
       if(score===1) upd.wins=(d.wins||0)+1; else if(score===0) upd.losses=(d.losses||0)+1; else upd.draws=(d.draws||0)+1;
       tx.update(ref, upd);
     });
-    if(_account) _account.rating=nr;
+    if(_account) _account[field]=nr;
     return nr;
   }catch(e){ return null; }
 }

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Sandbox · The Parlour</title>
+<link rel="stylesheet" href="styles.css"/>
+<style>
+  #view{position:relative;width:100%;height:74vh;min-height:420px;border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);background:#9ec6e6;box-shadow:var(--shadow);touch-action:none;cursor:crosshair}
+  #view canvas{display:block}
+  #cross{position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none;opacity:.8}
+  #cross:before,#cross:after{content:'';position:absolute;background:#fff;box-shadow:0 0 2px rgba(0,0,0,.6)}
+  #cross:before{left:8px;top:0;width:2px;height:18px}#cross:after{top:8px;left:0;height:2px;width:18px}
+  #overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;
+    text-align:center;background:rgba(8,10,7,.55);color:var(--text);cursor:pointer;padding:20px}
+  #overlay h3{font-family:'Cormorant Garamond';font-size:30px;margin:0 0 8px}
+  #overlay p{color:#e9e0cf;font-size:14px;max-width:340px;line-height:1.6;margin:0}
+  #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;background:#10130f;color:var(--muted);font-size:14px;line-height:1.6}
+  .hotbar{display:flex;gap:7px;justify-content:center;margin:12px 0 4px;flex-wrap:wrap}
+  .slot{width:42px;height:42px;border-radius:9px;border:3px solid transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,255,255,.85);font-weight:600}
+  .slot.on{border-color:var(--brass-lite);transform:scale(1.06)}
+  .toolbar{display:flex;gap:8px;align-items:center;justify-content:center;margin:8px 0;flex-wrap:wrap}
+  .modeToggle{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .modeToggle button{font-family:'Spectral';font-size:13px;padding:9px 15px;background:var(--panel);color:var(--muted);border:none;cursor:pointer}
+  .modeToggle button.on{background:var(--brass);color:var(--bg);font-weight:600}
+  .pad{position:absolute;bottom:10px;left:10px;display:none;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:4px}
+  .pad button{background:rgba(20,18,14,.6);border:1px solid var(--line);color:#fff;border-radius:9px;font-size:18px}
+  .jbtn{position:absolute;bottom:10px;right:10px;display:none;width:64px;height:64px;border-radius:50%;background:rgba(20,18,14,.6);border:1px solid var(--line);color:#fff;font-size:13px}
+  .touch .pad,.touch .jbtn{display:grid}.touch .jbtn{display:flex;align-items:center;justify-content:center}
+  .hint{font-size:12px;color:var(--faint);line-height:1.5;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar"></header>
+  <h2 class="title">The Sandbox</h2>
+
+  <div id="view">
+    <div id="cross"></div>
+    <div id="overlay"><h3>Click to play</h3><p>Mouse to look · <b>WASD</b> to move · <b>Space</b> to jump · <b>left-click</b> breaks · <b>right-click</b> places · keys <b>1–8</b> pick a block · <b>Esc</b> releases the mouse.</p></div>
+    <div class="pad"><button></button><button data-mv="fwd">▲</button><button></button><button data-mv="left">◀</button><button></button><button data-mv="right">▶</button><button></button><button data-mv="back">▼</button><button></button></div>
+    <button class="jbtn" data-mv="jump">JUMP</button>
+    <div id="err"></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="modeToggle"><button id="bBuild" class="on">Build</button><button id="bBreak">Break</button></div>
+    <button class="btn ghost" id="saveBtn">Save</button>
+    <button class="btn ghost" id="resetBtn">New world</button>
+  </div>
+  <div class="hotbar" id="hotbar"></div>
+  <div class="hint" id="hint">Best on a computer. On a phone: drag to look, use the on-screen pad, and tap to build/break.</div>
+
+  <footer>The Sandbox · an original first-person block builder · shared-world multiplayer coming next</footer>
+</div>
+
+<script type="module">
+import { requireApproved, renderHeader } from './common.js';
+await requireApproved();
+renderHeader('sandbox.html');
+
+const errBox=document.getElementById('err');
+const fail=(m)=>{ errBox.style.display='flex'; errBox.innerHTML=m; };
+let THREE;
+try{ THREE=await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js'); }
+catch(e){ fail('Could not load the 3D engine. Check your connection and reload.'); throw e; }
+
+try{
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints>0;
+  if(isTouch) document.getElementById('view').classList.add('touch');
+
+  // block types: [name, top, side, bottom]
+  const C=(h)=>new THREE.Color(h);
+  const TYPES=[
+    {n:'Grass', top:0x74b052, side:0x6b4f32, bot:0x6b4f32},
+    {n:'Dirt',  top:0x6b4f32, side:0x6b4f32, bot:0x6b4f32},
+    {n:'Stone', top:0x8d8d88, side:0x8d8d88, bot:0x8d8d88},
+    {n:'Wood',  top:0x9a7b46, side:0x6e4f2e, bot:0x9a7b46},
+    {n:'Leaves',top:0x4f8a3a, side:0x4f8a3a, bot:0x4f8a3a},
+    {n:'Sand',  top:0xddc88f, side:0xd6c084, bot:0xd6c084},
+    {n:'Brick', top:0x9a4a36, side:0x9a4a36, bot:0x9a4a36},
+    {n:'Glass', top:0xa8d4e6, side:0xa8d4e6, bot:0xa8d4e6}
+  ];
+  const COL = TYPES.map(t=>({top:C(t.top),side:C(t.side),bot:C(t.bot)}));
+  let curType=0, mode='build';
+
+  const blocks=new Map();
+  const K=(x,y,z)=>x+','+y+','+z;
+  const set=(x,y,z,t)=>blocks.set(K(x,y,z),t);
+  const get=(x,y,z)=>blocks.get(K(x,y,z));
+  const solid=(x,y,z)=>blocks.has(K(x,y,z));
+  const del=(x,y,z)=>blocks.delete(K(x,y,z));
+
+  // ---- scene ----
+  const wrap=document.getElementById('view');
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x9ec6e6);
+  scene.fog=new THREE.Fog(0x9ec6e6, 26, 60);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x6a7a5a, 1.0));
+  const sun=new THREE.DirectionalLight(0xfff3da, 0.6); sun.position.set(20,40,15); scene.add(sun);
+
+  const camera=new THREE.PerspectiveCamera(72, 1, 0.1, 1000);
+  const renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  wrap.appendChild(renderer.domElement);
+  const canvas=renderer.domElement; canvas.style.touchAction='none';
+  function resize(){ const w=wrap.clientWidth, h=wrap.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  resize(); window.addEventListener('resize', resize);
+
+  // ---- mesh (face-culled) ----
+  const FACES=[
+   {d:[1,0,0], c:[[.5,-.5,-.5],[.5,-.5,.5],[.5,.5,.5],[.5,.5,-.5]], k:'side'},
+   {d:[-1,0,0],c:[[-.5,-.5,.5],[-.5,-.5,-.5],[-.5,.5,-.5],[-.5,.5,.5]], k:'side'},
+   {d:[0,1,0], c:[[-.5,.5,-.5],[.5,.5,-.5],[.5,.5,.5],[-.5,.5,.5]], k:'top'},
+   {d:[0,-1,0],c:[[-.5,-.5,.5],[.5,-.5,.5],[.5,-.5,-.5],[-.5,-.5,-.5]], k:'bot'},
+   {d:[0,0,1], c:[[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]], k:'side'},
+   {d:[0,0,-1],c:[[.5,-.5,-.5],[-.5,-.5,-.5],[-.5,.5,-.5],[.5,.5,-.5]], k:'side'}
+  ];
+  let mesh=null;
+  function buildMesh(){
+    const pos=[], nor=[], col=[];
+    for(const [key,t] of blocks){
+      const [x,y,z]=key.split(',').map(Number);
+      const c=COL[t];
+      for(const f of FACES){
+        if(solid(x+f.d[0], y+f.d[1], z+f.d[2])) continue;
+        const color = f.k==='top'?c.top : (f.k==='bot'?c.bot : c.side);
+        const idx=[0,1,2,0,2,3];
+        for(const i of idx){ const v=f.c[i]; pos.push(x+v[0],y+v[1],z+v[2]); nor.push(f.d[0],f.d[1],f.d[2]); col.push(color.r,color.g,color.b); }
+      }
+    }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor,3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col,3));
+    if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); }
+    else { /* first time */ }
+    const mat=new THREE.MeshLambertMaterial({vertexColors:true, side:THREE.DoubleSide});
+    mesh=new THREE.Mesh(g, mat); scene.add(mesh);
+  }
+
+  // ---- world ----
+  function noise(x,z){ return (Math.sin(x*0.9)+Math.sin(z*1.1)+Math.sin((x+z)*0.5))/3; }
+  const S=15;
+  function genWorld(){
+    blocks.clear();
+    for(let x=-S;x<S;x++) for(let z=-S;z<S;z++){
+      const h=Math.max(0, Math.round(2 + 1.8*noise(x,z) + 1.2*noise(x*0.4+9,z*0.4+5)));
+      for(let y=0;y<=h;y++){ const t = y===h?0 : (y>=h-1?1:2); set(x,y,z,t); }
+    }
+  }
+  function topAt(x,z){ let yy=-1; for(let y=0;y<24;y++) if(solid(x,y,z)) yy=y; return yy; }
+
+  // ---- player physics ----
+  const player={x:0.5, y:8, z:0.5}; let vy=0, yaw=0, pitch=0, onGround=false;
+  const HW=0.3, PH=1.7, EYE=1.55, G=22, JUMP=8.2, SPEED=5.0;
+  const keys={};
+  function overlaps(){
+    const minBx=Math.floor(player.x-HW+0.5)-1, maxBx=Math.floor(player.x+HW+0.5)+1;
+    const minBy=Math.floor(player.y+0.5)-1,    maxBy=Math.floor(player.y+PH+0.5)+1;
+    const minBz=Math.floor(player.z-HW+0.5)-1, maxBz=Math.floor(player.z+HW+0.5)+1;
+    for(let bx=minBx;bx<=maxBx;bx++)for(let by=minBy;by<=maxBy;by++)for(let bz=minBz;bz<=maxBz;bz++){
+      if(!solid(bx,by,bz)) continue;
+      if(player.x-HW < bx+0.5 && player.x+HW > bx-0.5 &&
+         player.y    < by+0.5 && player.y+PH > by-0.5 &&
+         player.z-HW < bz+0.5 && player.z+HW > bz-0.5) return true;
+    }
+    return false;
+  }
+  function step(dt){
+    // horizontal intent
+    let fx=0, fz=0;
+    const f=(keys['w']||keys['arrowup']||btn.fwd)?1:0, b=(keys['s']||keys['arrowdown']||btn.back)?1:0;
+    const l=(keys['a']||keys['arrowleft']||btn.left)?1:0, r=(keys['d']||keys['arrowright']||btn.right)?1:0;
+    const mf=f-b, ms=r-l;
+    if(mf||ms){ const sinY=Math.sin(yaw), cosY=Math.cos(yaw);
+      fx = (mf*(-sinY) + ms*(cosY)); fz = (mf*(-cosY) + ms*(-sinY));
+      const len=Math.hypot(fx,fz)||1; fx/=len; fz/=len; }
+    const dx=fx*SPEED*dt, dz=fz*SPEED*dt;
+    player.x+=dx; if(overlaps()) player.x-=dx;
+    player.z+=dz; if(overlaps()) player.z-=dz;
+    // gravity
+    vy-=G*dt; let dy=vy*dt; player.y+=dy;
+    if(overlaps()){ player.y-=dy; if(vy<0) onGround=true; vy=0; } else onGround=false;
+    if((keys[' ']||btn.jump) && onGround){ vy=JUMP; onGround=false; }
+    if(player.y<-20){ const t=topAt(0,0); player.x=0.5; player.z=0.5; player.y=(t>=0?t+1:8); vy=0; }
+    camera.position.set(player.x, player.y+EYE, player.z);
+    const cp=Math.cos(pitch), q=new THREE.Vector3(Math.sin(yaw)*cp, Math.sin(pitch), Math.cos(yaw)*cp);
+    camera.lookAt(camera.position.x - q.x, camera.position.y - q.y, camera.position.z - q.z);
+  }
+
+  // ---- targeting (voxel ray from screen center) ----
+  function target(){
+    const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+    let px=camera.position.x, py=camera.position.y, pz=camera.position.z;
+    let prev=null; const stepN=0.08;
+    for(let d=0; d<6.5; d+=stepN){
+      const cx=Math.round(px), cy=Math.round(py), cz=Math.round(pz);
+      if(solid(cx,cy,cz)) return {hit:[cx,cy,cz], place:prev};
+      prev=[cx,cy,cz]; px+=dir.x*stepN; py+=dir.y*stepN; pz+=dir.z*stepN;
+    }
+    return null;
+  }
+  function act(){
+    const t=target(); if(!t) return;
+    if(mode==='break'){ const [x,y,z]=t.hit; del(x,y,z); buildMesh(); save(); }
+    else if(t.place){ const [x,y,z]=t.place; if(!solid(x,y,z)){ set(x,y,z,curType); if(overlaps()){ del(x,y,z); } else { buildMesh(); save(); } } }
+  }
+
+  // ---- input ----
+  const overlay=document.getElementById('overlay');
+  let locked=false;
+  canvas.addEventListener('mousedown', e=>{
+    if(isTouch) return;
+    if(!locked){ canvas.requestPointerLock&&canvas.requestPointerLock(); return; }
+    if(e.button===0){ mode='break'; setMode(); act(); }
+    else if(e.button===2){ mode='build'; setMode(); act(); }
+  });
+  canvas.addEventListener('contextmenu', e=>e.preventDefault());
+  document.addEventListener('pointerlockchange', ()=>{ locked=(document.pointerLockElement===canvas); overlay.style.display=locked?'none':'flex'; });
+  document.addEventListener('mousemove', e=>{ if(!locked) return; yaw-=e.movementX*0.0025; pitch-=e.movementY*0.0025; pitch=Math.max(-1.5,Math.min(1.5,pitch)); });
+  window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()]=true; if(/^[1-8]$/.test(e.key)){ curType=+e.key-1; drawHotbar(); } });
+  window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+
+  // touch: drag look + tap act + pad buttons
+  const btn={fwd:false,back:false,left:false,right:false,jump:false};
+  if(isTouch){
+    overlay.querySelector('h3').textContent='Tap to start';
+    overlay.querySelector('p').innerHTML='Drag to look · use the pad to move · tap the world to build/break (toggle below).';
+    overlay.addEventListener('click',()=>{ overlay.style.display='none'; });
+    let lastX=0,lastY=0,dragging=false,moved=0,downT=0;
+    canvas.addEventListener('pointerdown',e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; moved=0; downT=Date.now(); });
+    canvas.addEventListener('pointermove',e=>{ if(!dragging)return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX;lastY=e.clientY; yaw-=dx*0.005; pitch=Math.max(-1.5,Math.min(1.5,pitch-dy*0.005)); moved+=Math.abs(dx)+Math.abs(dy); });
+    canvas.addEventListener('pointerup',e=>{ dragging=false; if(moved<10 && Date.now()-downT<350) act(); });
+    document.querySelectorAll('.pad button[data-mv], .jbtn').forEach(b=>{ const k=b.dataset.mv; if(!k)return; const on=e=>{e.preventDefault();btn[k]=true;}, off=e=>{e.preventDefault();btn[k]=false;}; b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off); b.addEventListener('pointerleave',off); b.addEventListener('pointercancel',off); });
+  } else {
+    overlay.addEventListener('click',()=>{ canvas.requestPointerLock&&canvas.requestPointerLock(); });
+  }
+
+  // ---- UI ----
+  function setMode(){ document.getElementById('bBuild').classList.toggle('on',mode==='build'); document.getElementById('bBreak').classList.toggle('on',mode==='break'); }
+  document.getElementById('bBuild').onclick=()=>{ mode='build'; setMode(); };
+  document.getElementById('bBreak').onclick=()=>{ mode='break'; setMode(); };
+  const hb=document.getElementById('hotbar');
+  function drawHotbar(){ hb.innerHTML=''; TYPES.forEach((t,i)=>{ const s=document.createElement('div'); s.className='slot'+(i===curType?' on':''); s.style.background='#'+t.top.toString(16).padStart(6,'0'); s.textContent=(i+1); s.title=t.n; s.onclick=()=>{ curType=i; mode='build'; setMode(); drawHotbar(); }; hb.appendChild(s); }); }
+  drawHotbar();
+  document.getElementById('saveBtn').onclick=()=>{ save(); const b=document.getElementById('saveBtn'); b.textContent='Saved ✓'; setTimeout(()=>b.textContent='Save',1200); };
+  document.getElementById('resetBtn').onclick=()=>{ if(confirm('Generate a fresh world? Your current build is replaced.')){ genWorld(); buildMesh(); respawn(); save(); } };
+
+  // ---- persistence ----
+  function save(){ try{ const arr=[]; for(const [k,t] of blocks){ const [x,y,z]=k.split(',').map(Number); arr.push([x,y,z,t]); } localStorage.setItem('sandbox_v2', JSON.stringify(arr)); }catch(_){} }
+  function load(){ try{ const a=JSON.parse(localStorage.getItem('sandbox_v2')||'null'); if(a&&a.length){ blocks.clear(); a.forEach(([x,y,z,t])=>set(x,y,z,t)); return true; } }catch(_){} return false; }
+  function respawn(){ const t=topAt(0,0); player.x=0.5; player.z=0.5; player.y=(t>=0?t+1.2:8); vy=0; yaw=0; pitch=0; }
+
+  if(!load()) genWorld();
+  buildMesh(); respawn();
+
+  // ---- loop ----
+  let last=performance.now();
+  function loop(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; step(dt); renderer.render(scene,camera); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+}catch(e){ fail('Something went wrong starting the sandbox.<br><br><span style="font-size:12px">'+(e&&e.message?e.message:e)+'</span>'); throw e; }
+</script>
+</body>
+</html>

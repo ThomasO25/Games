@@ -55,7 +55,7 @@ function rowHTML(p, waiting){
            (p.role==='admin'?`<button class="mini" data-demote="${p.uid}">Remove host</button>`:`<button class="mini" data-promote="${p.uid}">Make host</button>`);
   } else acts='<span class="pmeta">that\u2019s you</span>';
   return `<div class="prow"><div class="pinfo"><div class="pname">${p.name||'—'} ${tag}</div>
-    <div class="pmeta">${p.email||''} · rating ${p.rating||800} · ${(p.chips||0).toLocaleString()} chips</div></div>
+    <div class="pmeta">${p.email||''} · blitz ${p.ratingBlitz||p.rating||800} · ${(p.chips||0).toLocaleString()} chips</div></div>
     <div class="pact">${acts}</div></div>`;
 }
 const RULES_HINT='Couldn\u2019t update this member. This means your Firestore security rules don\u2019t let hosts edit other members yet. Publish the host rules once (they\u2019re in the chat), then this works from the site every time.';
